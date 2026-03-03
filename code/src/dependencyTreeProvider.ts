@@ -13,6 +13,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private projects: Map<string, DependencyInfo[]> = new Map();
+  private stdlibDeps: Map<string, DependencyInfo[]> = new Map();
   private isWorkspace = false;
 
   // 统一的节点管理器 - 确保每个节点只有一个实例
@@ -29,9 +30,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       try {
         const deps = await this.parser.parseDependencies(root);
         this.projects.set(root, deps);
+        
+        // Also parse stdlib dependencies
+        const stdlibDeps = await this.parser.parseStdlibDeps(root);
+        this.stdlibDeps.set(root, stdlibDeps);
       } catch (e) {
         console.error(`Failed to parse dependencies for ${root}:`, e);
         this.projects.set(root, []);
+        this.stdlibDeps.set(root, []);
       }
     }
   }
@@ -43,6 +49,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     // Re-scan all projects
     const roots = Array.from(this.projects.keys());
     this.projects.clear();
+    this.stdlibDeps.clear();
     this.initialize(roots).then(() => {
       this._onDidChangeTreeData.fire();
     });
@@ -57,17 +64,29 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         return item;
       }
       case NodeType.Category: {
-        const label = element.category === 'direct' ? 'Direct Dependencies' : 'Indirect Dependencies';
-        const count = element.dependencies.filter(d =>
-          element.category === 'direct' ? !d.indirect : d.indirect
-        ).length;
+        let label: string;
+        let iconName: string;
+        
+        if (element.category === 'direct') {
+          label = 'Direct Dependencies';
+          iconName = 'folder-library';
+        } else if (element.category === 'indirect') {
+          label = 'Indirect Dependencies';
+          iconName = 'folder';
+        } else { // stdlib
+          label = 'Standard Library';
+          iconName = 'symbol-package';
+        }
+        
+        const count = element.category === 'stdlib' 
+          ? element.dependencies.length
+          : element.dependencies.filter(d => element.category === 'direct' ? !d.indirect : d.indirect).length;
+        
         const item = new vscode.TreeItem(
           `${label} (${count})`,
           vscode.TreeItemCollapsibleState.Expanded,
         );
-        item.iconPath = element.category === 'direct'
-          ? new vscode.ThemeIcon('folder-library')
-          : new vscode.ThemeIcon('folder');
+        item.iconPath = new vscode.ThemeIcon(iconName);
         item.contextValue = `category-${element.category}`;
         return item;
       }
@@ -77,14 +96,27 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
           element.label,
           hasSource ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
         );
-        item.iconPath = element.dep.indirect
-          ? new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'))
-          : new vscode.ThemeIcon('package');
+        
+        // Set icon based on dependency type and replace status
+        if (element.dep.replace) {
+          item.iconPath = new vscode.ThemeIcon('arrow-swap');
+          item.description = '→ replaced';
+        } else if (element.dep.version === 'stdlib') {
+          item.iconPath = new vscode.ThemeIcon('symbol-package');
+        } else if (element.dep.indirect) {
+          item.iconPath = new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'));
+        } else {
+          item.iconPath = new vscode.ThemeIcon('package');
+        }
+        
         item.tooltip = this.buildDepTooltip(element);
         if (!hasSource) {
           item.description = '(source not available)';
         }
-        item.contextValue = element.dep.indirect ? 'dependency-indirect' : 'dependency-direct';
+        
+        const contextSuffix = element.dep.version === 'stdlib' ? 'stdlib' 
+          : element.dep.indirect ? 'indirect' : 'direct';
+        item.contextValue = `dependency-${contextSuffix}`;
         return item;
       }
       case NodeType.Directory: {
@@ -120,18 +152,27 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         const entry = Array.from(this.projects.entries())[0];
         if (!entry) { return []; }
         const [root, deps] = entry;
-        return this.buildCategories(root, deps, undefined);
+        const stdlibDeps = this.stdlibDeps.get(root) || [];
+        return this.buildCategories(root, deps, stdlibDeps, undefined);
       }
     }
 
     if (element instanceof ProjectNode) {
-      return this.buildCategories(element.projectRoot, element.dependencies, element);
+      const stdlibDeps = this.stdlibDeps.get(element.projectRoot) || [];
+      return this.buildCategories(element.projectRoot, element.dependencies, stdlibDeps, element);
     }
 
     if (element instanceof CategoryNode) {
-      const filtered = element.dependencies.filter(d =>
-        element.category === 'direct' ? !d.indirect : d.indirect
-      );
+      let filtered: DependencyInfo[];
+      if (element.category === 'stdlib') {
+        const stdlibDeps = this.stdlibDeps.get(element.projectRoot) || [];
+        filtered = stdlibDeps;
+      } else {
+        filtered = element.dependencies.filter(d =>
+          element.category === 'direct' ? !d.indirect : d.indirect
+        );
+      }
+      
       return filtered
         .sort((a, b) => a.path.localeCompare(b.path))
         .map(dep => {
@@ -281,6 +322,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   private buildCategories(
     projectRoot: string,
     deps: DependencyInfo[],
+    stdlibDeps: DependencyInfo[],
     parent: ProjectNode | undefined,
   ): TreeNode[] {
     const categories: TreeNode[] = [];
@@ -293,6 +335,10 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     }
     if (this.config.showIndirect && indirectDeps.length > 0) {
       const categoryNode = this.getOrCreateNode(() => new CategoryNode('Indirect Dependencies', 'indirect', projectRoot, deps, parent));
+      categories.push(categoryNode);
+    }
+    if (stdlibDeps.length > 0) {
+      const categoryNode = this.getOrCreateNode(() => new CategoryNode('Standard Library', 'stdlib', projectRoot, stdlibDeps, parent));
       categories.push(categoryNode);
     }
     return categories;

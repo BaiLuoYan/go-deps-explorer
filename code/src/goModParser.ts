@@ -103,6 +103,139 @@ export class GoModParser {
     return path.join(gopath, 'pkg', 'mod', `${effectiveDep.path}@${effectiveDep.version}`);
   }
 
+  async parseStdlibDeps(projectRoot: string): Promise<DependencyInfo[]> {
+    return new Promise((resolve, reject) => {
+      // First get GOROOT
+      exec('go env GOROOT', { cwd: projectRoot }, (error, goroot, _stderr) => {
+        if (error) {
+          outputChannel.appendLine(`[WARN] Failed to get GOROOT: ${error.message}`);
+          resolve([]);
+          return;
+        }
+        
+        const gorootPath = goroot.trim();
+        
+        // Then get project imports
+        exec('go list -json ./...', { cwd: projectRoot, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, _stderr) => {
+          if (error) {
+            outputChannel.appendLine(`[WARN] Failed to get project imports: ${error.message}`);
+            resolve([]);
+            return;
+          }
+          
+          try {
+            const packages = parseJsonStream(stdout);
+            const stdlibImports = new Set<string>();
+            
+            // Extract all imports from all packages
+            for (const pkg of packages) {
+              if (pkg.Imports) {
+                for (const imp of pkg.Imports) {
+                  // Standard library packages don't contain dots or are well-known paths
+                  if (this.isStandardLibraryPackage(imp)) {
+                    stdlibImports.add(imp);
+                  }
+                }
+              }
+            }
+            
+            // Convert to DependencyInfo format
+            const stdlibDeps: DependencyInfo[] = [];
+            for (const pkgName of Array.from(stdlibImports).sort()) {
+              const stdlibDir = path.join(gorootPath, 'src', pkgName);
+              stdlibDeps.push({
+                path: pkgName,
+                version: 'stdlib',
+                indirect: false,
+                dir: stdlibDir,
+              });
+            }
+            
+            outputChannel.appendLine(`[${projectRoot}] Found ${stdlibDeps.length} standard library packages`);
+            resolve(stdlibDeps);
+          } catch (e) {
+            outputChannel.appendLine(`[ERROR] Failed to parse stdlib deps: ${e}`);
+            resolve([]);
+          }
+        });
+      });
+    });
+  }
+
+  private isStandardLibraryPackage(packagePath: string): boolean {
+    // Skip internal and local packages
+    if (packagePath.startsWith('./') || packagePath.startsWith('../')) {
+      return false;
+    }
+    
+    // Well-known standard library packages
+    const stdlibPrefixes = [
+      'archive/',
+      'bufio',
+      'builtin', 
+      'bytes',
+      'compress/',
+      'container/',
+      'context',
+      'crypto/',
+      'database/',
+      'debug/',
+      'embed',
+      'encoding/',
+      'errors',
+      'expvar',
+      'fmt',
+      'go/',
+      'hash/',
+      'html/',
+      'image/',
+      'index/',
+      'io/',
+      'io',
+      'log/',
+      'log',
+      'math/',
+      'math',
+      'mime/',
+      'mime',
+      'net/',
+      'net',
+      'os/',
+      'os',
+      'path/',
+      'path',
+      'plugin',
+      'reflect',
+      'regexp',
+      'runtime/',
+      'runtime',
+      'sort',
+      'strconv',
+      'strings',
+      'sync/',
+      'sync',
+      'syscall',
+      'testing/',
+      'testing',
+      'text/',
+      'time/',
+      'time',
+      'unicode/',
+      'unicode',
+      'unsafe'
+    ];
+    
+    // Check if package matches any standard library pattern
+    for (const prefix of stdlibPrefixes) {
+      if (packagePath === prefix.replace('/', '') || packagePath.startsWith(prefix)) {
+        return true;
+      }
+    }
+    
+    // Also check if package name doesn't contain dots (simple heuristic)
+    return !packagePath.includes('.') && !packagePath.includes('/');
+  }
+
   hasVendor(projectRoot: string): boolean {
     const vendorModules = path.join(projectRoot, 'vendor', 'modules.txt');
     return fs.existsSync(vendorModules);

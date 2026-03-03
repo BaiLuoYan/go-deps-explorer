@@ -84,8 +84,17 @@ class GoModParser {
   // 解析单个项目的所有依赖
   async parseDependencies(projectRoot: string): Promise<DependencyInfo[]>;
   
+  // 解析标准库依赖（新增）
+  async parseStdlibDeps(projectRoot: string): Promise<DependencyInfo[]>;
+  
   // 内部：执行 go list -m -json all
   private async runGoList(cwd: string): Promise<DependencyInfo[]>;
+  
+  // 内部：执行 go list -json ./... 获取项目 import 列表
+  private async runGoListImports(cwd: string): Promise<string[]>;
+  
+  // 判断包路径是否为标准库包
+  private isStandardLibraryPackage(pkgPath: string): boolean;
   
   // fallback 解析器：支持多 require 块和单行 require
   private async parseGoModFallback(projectRoot: string): Promise<DependencyInfo[]>;
@@ -95,6 +104,9 @@ class GoModParser {
   
   // 获取依赖包的源码路径
   getSourcePath(dep: DependencyInfo, projectRoot: string, useVendor: boolean): string;
+  
+  // 获取标准库包的源码路径（新增）
+  getStdlibSourcePath(pkgPath: string): string;
 }
 ```
 
@@ -220,7 +232,7 @@ interface ProjectNode extends BaseNode {
 // 分类节点
 interface CategoryNode extends BaseNode {
   type: NodeType.Category;
-  category: 'direct' | 'indirect';
+  category: 'direct' | 'indirect' | 'stdlib';    // 新增 stdlib 类型
   projectRoot: string;
   dependencies: DependencyInfo[];
 }
@@ -349,7 +361,12 @@ class EditorTracker {
   private isDependencyFile(filePath: string): boolean {
     const gopath = process.env.GOPATH || path.join(os.homedir(), 'go');
     const modCachePath = path.join(gopath, 'pkg', 'mod');
-    return filePath.startsWith(modCachePath) || filePath.includes('/vendor/');
+    // 新增：支持 $GOROOT/src/ 路径检测
+    const goroot = process.env.GOROOT || path.join(os.homedir(), 'go');
+    const gorootSrcPath = path.join(goroot, 'src');
+    return filePath.startsWith(modCachePath) || 
+           filePath.includes('/vendor/') ||
+           filePath.startsWith(gorootSrcPath);
   }
 }
 ```
@@ -671,10 +688,20 @@ getTreeItem(node: DependencyNode): vscode.TreeItem {
     hasSource ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
   );
   
-  // 图标区分直接/间接
-  item.iconPath = node.dep.indirect
-    ? new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'))
-    : new vscode.ThemeIcon('package');
+  // 图标区分直接/间接/标准库/replace
+  if (node.dep.replace) {
+    // Replace 依赖使用特殊图标
+    item.iconPath = new vscode.ThemeIcon('arrow-swap');
+    item.description = '→ replaced';
+  } else if (node.category === 'stdlib') {
+    // 标准库包使用内置图标
+    item.iconPath = new vscode.ThemeIcon('library');
+  } else {
+    // 普通依赖包图标
+    item.iconPath = node.dep.indirect
+      ? new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'))
+      : new vscode.ThemeIcon('package');
+  }
   
   // 源码不存在时显示说明
   if (!hasSource) {

@@ -83,6 +83,37 @@ export class EditorTracker {
       }
     }
 
+    // Check GOROOT/src for standard library files
+    return new Promise((resolve) => {
+      const { exec } = require('child_process');
+      exec('go env GOROOT', (error: any, stdout: string, _stderr: any) => {
+        if (error) {
+          resolve(false);
+          return;
+        }
+        const goroot = stdout.trim();
+        const gorootSrc = path.join(goroot, 'src');
+        resolve(filePath.startsWith(gorootSrc));
+      });
+    }) as any || false; // Fallback to synchronous check
+
+    // Synchronous fallback - check common GOROOT locations
+    const commonGorootPaths: string[] = [
+      '/usr/local/go/src',
+      '/usr/lib/go/src',
+    ];
+    
+    const goroot: string | undefined = process.env.GOROOT;
+    if (goroot !== undefined) {
+      commonGorootPaths.push(path.join(goroot as string, 'src'));
+    }
+
+    for (const gorootSrc of commonGorootPaths) {
+      if (filePath.startsWith(gorootSrc)) {
+        return true;
+      }
+    }
+
     return false;
   }
 

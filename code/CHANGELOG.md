@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.10] - 2026-03-03
+
+### Added
+- Go standard library packages now shown in dependency tree under "Standard Library" category
+  - Detected via `go list -json ./...` and filtered by stdlib package names
+  - Browsable directory structure from `$GOROOT/src/`
+  - Cmd+Click jump tracking support for stdlib source files
+  - Distinct `symbol-package` icon for stdlib packages
+- Replace directive dependencies now display a special `arrow-swap` icon with "→ replaced" description
+
 ## [0.1.9] - 2026-03-03
 
 ### Fixed

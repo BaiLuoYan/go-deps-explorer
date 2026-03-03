@@ -33,12 +33,17 @@ export class ProjectNode {
   }
 }
 
+export interface StdlibInfo {
+  name: string;
+  dir: string;
+}
+
 export class CategoryNode {
   readonly type = NodeType.Category;
   readonly id: string;
   constructor(
     public readonly label: string,
-    public readonly category: 'direct' | 'indirect',
+    public readonly category: 'direct' | 'indirect' | 'stdlib',
     public readonly projectRoot: string,
     public readonly dependencies: DependencyInfo[],
     public readonly parent: ProjectNode | undefined,

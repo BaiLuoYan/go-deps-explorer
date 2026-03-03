@@ -97,6 +97,23 @@
 | **TC-NEW-06** | **Tooltip 英文标签和换行** | **鼠标 hover 依赖包节点** | **显示英文标签且正确换行** |
 | **TC-NEW-07** | **buildNodeChain 构建完整节点链** | **跳转到未展开的依赖文件** | **主动构建 project→category→dependency→directories→file 完整链路** |
 | **TC-NEW-08** | **多项目工作空间下同一依赖包的节点 ID 独立性验证** | **工作空间中有两个项目都依赖 github.com/gin-gonic/gin@v1.9.1** | **两个项目中的同名依赖拥有不同的节点 ID，包含各自的 projectRoot 前缀，展开定位时不会混淆** |
+| **TC-NEW-09** | **标准库包解析和展示** | **项目中 import fmt, net/http, os 等标准库包** | **依赖树显示 "Standard Library" 分类节点，展示所有项目使用的标准库包** |
+| **TC-NEW-10** | **标准库包 Cmd+Click 定位** | **Cmd+Click 跳转到 fmt.Println 源码** | **自动在依赖树中定位到 fmt 包节点并高亮选中** |
+| **TC-NEW-11** | **Replace 依赖图标显示** | **go.mod 中包含 replace github.com/user/pkg => ../local/pkg** | **该依赖包在树中显示 arrow-swap 图标和 "→ replaced" 描述** |
+| **TC-NEW-12** | **Replace 依赖 tooltip 显示替换信息** | **鼠标 hover 被 replace 的依赖包** | **tooltip 显示完整的替换信息：原路径 → 替换路径** |
+
+### 2.6 新增功能测试用例 (v0.1.10)
+
+| 测试编号 | 测试用例描述 | 输入数据 | 预期结果 |
+|---------|-------------|----------|----------|
+| **SP-001** | **Go 标准库包解析** | **项目代码 import fmt, net/http, os** | **parseStdlibDeps 返回 fmt, net/http, os 包信息** |
+| **SP-002** | **标准库包路径判断** | **包路径 "fmt"、"net/http"、"github.com/user/pkg"** | **前两个判断为标准库，第三个不是** |
+| **SP-003** | **$GOROOT/src 路径构建** | **标准库包 "net/http"** | **返回 $GOROOT/src/net/http 路径** |
+| **SP-004** | **标准库包图标区分** | **标准库包节点** | **使用 library 图标区别于普通依赖** |
+| **RP-001** | **Replace 依赖图标检测** | **go.mod 包含 replace 指令的依赖** | **DependencyNode 使用 arrow-swap 图标** |
+| **RP-002** | **Replace 描述文本显示** | **被 replace 的依赖包节点** | **description 字段显示 "→ replaced"** |
+| **RP-003** | **Replace tooltip 信息** | **replace 依赖的 hover tooltip** | **显示完整替换信息：原路径 → 目标路径** |
+| **RP-004** | **$GOROOT/src 路径检测** | **EditorTracker 检测 /usr/local/go/src/fmt/print.go** | **isDependencyFile 返回 true** |
 
 ---
 
@@ -121,17 +138,20 @@
 | F3 | 工作空间支持 | - | 集成测试 |
 | F3.1 | 多项目分组显示 | TC-NEW-03 | 集成测试 |
 | F3.2 | 多项目独立节点管理 | TC-NEW-08 | 单元测试 |
-| F4 | 跳转定位 | ET-001~ET-009, TC-NEW-07 | 单元测试 |
-| F4.1 | 精确路径展开 | TC-NEW-04 | 集成测试 |
-| F4.2 | 高亮选中文件 | - | 集成测试 |
-| F4.3 | 多项目正确定位 | TC-NEW-03 | 集成测试 |
-| F5 | 自动刷新 | - | 集成测试 |
-| F5.1 | 手动刷新按钮 | - | 集成测试 |
+| F4 | Go 标准库包展示 | SP-001~SP-004, TC-NEW-09, TC-NEW-10 | 单元测试 + 集成测试 |
+| F4.1 | 标准库包解析和过滤 | SP-001, SP-002 | 单元测试 |
+| F4.2 | 标准库源码路径构建 | SP-003 | 单元测试 |
+| F4.3 | 标准库包图标区分 | SP-004 | 单元测试 |
+| F4.4 | 标准库包跳转定位 | TC-NEW-10, RP-004 | 集成测试 |
 
 ### 3.2 P1 需求覆盖
 
 | 需求 ID | 需求描述 | 测试覆盖 | 测试类型 |
 |---------|----------|----------|----------|
+| F5 | Replace 依赖特殊图标 | RP-001~RP-004, TC-NEW-11, TC-NEW-12 | 单元测试 + 集成测试 |
+| F5.1 | Replace 图标使用 | RP-001 | 单元测试 |
+| F5.2 | Replace 描述文本 | RP-002 | 单元测试 |
+| F5.3 | Replace tooltip 信息 | RP-003, TC-NEW-12 | 单元测试 + 集成测试 |
 | F6 | Replace 指令处理 | GP-004, CM-001 | 单元测试 |
 | F6.1 | handleReplace 设置项 | CM-001 | 单元测试 |
 | F6.2 | Replace 路径覆盖逻辑 | GP-004 | 单元测试 |
