@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.17] - 2026-03-03
+
+### Changed
+- Enhanced package.json description with full feature summary
+- Added keywords for better discoverability on VS Marketplace and Open VSX
+
 ## [0.1.16] - 2026-03-03
 
 ### Fixed
