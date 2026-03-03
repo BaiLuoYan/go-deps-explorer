@@ -63,11 +63,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   context.subscriptions.push(configDisposable);
 
-  console.log('Go Dependencies Explorer activated');
+  console.log('Go Deps Explorer activated');
 }
 
 export function deactivate(): void {
-  console.log('Go Dependencies Explorer deactivated');
+  console.log('Go Deps Explorer deactivated');
 }
 
 function findGoProjects(): string[] {

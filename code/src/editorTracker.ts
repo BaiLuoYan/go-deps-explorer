@@ -16,7 +16,7 @@ export class EditorTracker {
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
   ) {
-    this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
+    this.outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
     this.disposable = vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) { this.onEditorChanged(editor); }
     });

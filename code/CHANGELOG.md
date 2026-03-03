@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.15] - 2026-03-03
+
+### Fixed
+- Unified Output Channel name to "Go Deps Explorer" (was split between "Go Dependencies Explorer" and "Go Deps Explorer")
+
 ## [0.1.14] - 2026-03-03
 
 ### Fixed
