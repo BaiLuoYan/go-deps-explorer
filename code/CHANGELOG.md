@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] - 2026-03-03
+
+### Fixed
+- Fixed go.mod fallback parser: now correctly handles multiple `require` blocks and single-line requires
+- Added Output Channel "Go Deps Explorer" for diagnostics (check if `go list` fails)
+
 ## [0.1.3] - 2026-03-03
 
 ### Changed

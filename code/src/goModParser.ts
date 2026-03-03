@@ -1,15 +1,19 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as vscode from 'vscode';
 import { exec } from 'child_process';
 import { DependencyInfo } from './models';
 import { ConfigManager } from './configManager';
 import { getGopath } from './utils';
+
+const outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
 
 export class GoModParser {
   constructor(private config: ConfigManager) {}
 
   async parseDependencies(projectRoot: string): Promise<DependencyInfo[]> {
     const deps = await this.runGoList(projectRoot);
+    outputChannel.appendLine(`[${projectRoot}] Loaded ${deps.length} dependencies (${deps.filter(d => !d.indirect).length} direct, ${deps.filter(d => d.indirect).length} indirect)`);
     return deps;
   }
 
@@ -18,7 +22,7 @@ export class GoModParser {
       exec('go list -m -json all', { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, _stderr) => {
         if (error) {
           // Fallback: try parsing go.mod directly
-          console.warn(`go list failed: ${error.message}, trying go.mod parse fallback`);
+          outputChannel.appendLine(`[WARN] go list failed: ${error.message}, using go.mod fallback`);
           this.parseGoModFallback(cwd).then(resolve).catch(reject);
           return;
         }
@@ -56,14 +60,28 @@ export class GoModParser {
     if (!fs.existsSync(goModPath)) { return []; }
     const content = fs.readFileSync(goModPath, 'utf8');
     const deps: DependencyInfo[] = [];
-    const requireRegex = /^\s+([\w./\-@]+)\s+(v[\w.\-+]+)(\s*\/\/\s*indirect)?/gm;
+
+    // Match single-line: require github.com/foo v1.0.0
+    const singleRegex = /^require\s+([\w./\-@]+)\s+(v[\w.\-+]+)/gm;
     let match: RegExpExecArray | null;
-    while ((match = requireRegex.exec(content)) !== null) {
-      deps.push({
-        path: match[1],
-        version: match[2],
-        indirect: !!match[3],
-      });
+    while ((match = singleRegex.exec(content)) !== null) {
+      deps.push({ path: match[1], version: match[2], indirect: false });
+    }
+
+    // Match block: require ( ... )
+    const blockRegex = /require\s*\(([\s\S]*?)\)/g;
+    let blockMatch: RegExpExecArray | null;
+    while ((blockMatch = blockRegex.exec(content)) !== null) {
+      const block = blockMatch[1];
+      const lineRegex = /^\s*([\w./\-@]+)\s+(v[\w.\-+]+)(\s*\/\/\s*indirect)?/gm;
+      let lineMatch: RegExpExecArray | null;
+      while ((lineMatch = lineRegex.exec(block)) !== null) {
+        deps.push({
+          path: lineMatch[1],
+          version: lineMatch[2],
+          indirect: !!lineMatch[3],
+        });
+      }
     }
     return deps;
   }
