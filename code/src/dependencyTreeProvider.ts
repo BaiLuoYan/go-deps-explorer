@@ -15,11 +15,8 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   private projects: Map<string, DependencyInfo[]> = new Map();
   private isWorkspace = false;
 
-  // 节点缓存 - 确保 reveal 能找到真实的节点引用
-  private categoryCache = new Map<string, CategoryNode>();
-  private dependencyCache = new Map<string, DependencyNode>();
-  private directoryCache = new Map<string, DirectoryNode>();
-  private fileCache = new Map<string, FileNode>();
+  // 统一的节点管理器 - 确保每个节点只有一个实例
+  private nodeMap = new Map<string, TreeNode>();
 
   constructor(
     private parser: GoModParser,
@@ -40,11 +37,8 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   }
 
   refresh(): void {
-    // 清空所有缓存
-    this.categoryCache.clear();
-    this.dependencyCache.clear();
-    this.directoryCache.clear();
-    this.fileCache.clear();
+    // 清空节点映射表
+    this.nodeMap.clear();
     
     // Re-scan all projects
     const roots = Array.from(this.projects.keys());
@@ -117,9 +111,10 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     if (!element) {
       // Root level
       if (this.isWorkspace) {
-        return Array.from(this.projects.entries()).map(([root, deps]) =>
-          new ProjectNode(path.basename(root), root, deps)
-        );
+        return Array.from(this.projects.entries()).map(([root, deps]) => {
+          const projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps));
+          return projectNode as ProjectNode;
+        });
       } else {
         // Single project: show categories directly
         const entry = Array.from(this.projects.entries())[0];
@@ -141,15 +136,8 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         .sort((a, b) => a.path.localeCompare(b.path))
         .map(dep => {
           const sourcePath = this.parser.getSourcePath(dep, element.projectRoot);
-          const cacheKey = `${dep.path}@${dep.version}`;
-          
-          // 使用缓存或创建新节点
-          let depNode = this.dependencyCache.get(cacheKey);
-          if (!depNode) {
-            depNode = new DependencyNode(dep, sourcePath, element);
-            this.dependencyCache.set(cacheKey, depNode);
-          }
-          return depNode;
+          const depNode = this.getOrCreateNode(() => new DependencyNode(dep, sourcePath, element));
+          return depNode as DependencyNode;
         });
     }
 
@@ -174,33 +162,60 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
 
   /** Find and return the cached nodes for a given absolute file path */
   findNodeForFile(filePath: string): { depNode?: DependencyNode; fileNode?: FileNode } | undefined {
-    // 首先检查是否已有缓存的文件节点
-    const cachedFileNode = this.fileCache.get(filePath);
-    if (cachedFileNode) {
-      // 找到对应的依赖节点
-      const depCacheKey = `${cachedFileNode.dep.path}@${cachedFileNode.dep.version}`;
-      const cachedDepNode = this.dependencyCache.get(depCacheKey);
-      if (cachedDepNode) {
-        return { depNode: cachedDepNode, fileNode: cachedFileNode };
+    // 首先在 nodeMap 中查找已存在的文件节点
+    for (const [id, node] of this.nodeMap) {
+      if (id.startsWith('file:') && node instanceof FileNode && node.fsPath === filePath) {
+        // 找到对应的依赖节点
+        const depId = `dep:${node.dep.path}@${node.dep.version}`;
+        const depNode = this.nodeMap.get(depId) as DependencyNode | undefined;
+        return { depNode, fileNode: node };
       }
     }
 
-    // 如果文件节点未缓存，尝试找到对应的依赖节点
+    // 如果文件节点未缓存，主动构建完整的节点链
     for (const [root, deps] of this.projects) {
       for (const dep of deps) {
         const sourcePath = this.parser.getSourcePath(dep, root);
         if (filePath.startsWith(sourcePath + path.sep) || filePath === sourcePath) {
-          const depCacheKey = `${dep.path}@${dep.version}`;
-          const cachedDepNode = this.dependencyCache.get(depCacheKey);
-          if (cachedDepNode) {
-            return { depNode: cachedDepNode };
+          // 主动创建完整的节点链：project -> category -> dependency
+          const projectId = `project:${root}`;
+          let projectNode = this.nodeMap.get(projectId) as ProjectNode | undefined;
+          if (!projectNode) {
+            projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps)) as ProjectNode;
           }
-          // 如果依赖节点也未缓存，说明树未展开到该层级，先返回 undefined
-          return undefined;
+
+          const categoryId = `category:${root}:${dep.indirect ? 'indirect' : 'direct'}`;
+          let categoryNode = this.nodeMap.get(categoryId) as CategoryNode | undefined;
+          if (!categoryNode) {
+            categoryNode = this.getOrCreateNode(() => new CategoryNode(
+              dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies',
+              dep.indirect ? 'indirect' : 'direct',
+              root,
+              deps,
+              this.isWorkspace ? projectNode : undefined
+            )) as CategoryNode;
+          }
+
+          // 创建依赖节点
+          const depNode = this.getOrCreateNode(() => new DependencyNode(dep, sourcePath, categoryNode)) as DependencyNode;
+
+          // 返回依赖节点，文件节点暂时为空（因为树可能未展开到文件层级）
+          return { depNode };
         }
       }
     }
     return undefined;
+  }
+
+  /** 获取或创建节点，确保每个 id 只有一个实例 */
+  private getOrCreateNode<T extends TreeNode>(factory: () => T): T {
+    const node = factory();
+    const existing = this.nodeMap.get(node.id);
+    if (existing) {
+      return existing as T;
+    }
+    this.nodeMap.set(node.id, node);
+    return node;
   }
 
   private buildCategories(
@@ -213,21 +228,11 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const indirectDeps = deps.filter(d => d.indirect);
 
     if (directDeps.length > 0) {
-      const cacheKey = `${projectRoot}:direct`;
-      let categoryNode = this.categoryCache.get(cacheKey);
-      if (!categoryNode) {
-        categoryNode = new CategoryNode('Direct Dependencies', 'direct', projectRoot, deps, parent);
-        this.categoryCache.set(cacheKey, categoryNode);
-      }
+      const categoryNode = this.getOrCreateNode(() => new CategoryNode('Direct Dependencies', 'direct', projectRoot, deps, parent));
       categories.push(categoryNode);
     }
     if (this.config.showIndirect && indirectDeps.length > 0) {
-      const cacheKey = `${projectRoot}:indirect`;
-      let categoryNode = this.categoryCache.get(cacheKey);
-      if (!categoryNode) {
-        categoryNode = new CategoryNode('Indirect Dependencies', 'indirect', projectRoot, deps, parent);
-        this.categoryCache.set(cacheKey, categoryNode);
-      }
+      const categoryNode = this.getOrCreateNode(() => new CategoryNode('Indirect Dependencies', 'indirect', projectRoot, deps, parent));
       categories.push(categoryNode);
     }
     return categories;
@@ -243,21 +248,13 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         if (entry.name.startsWith('.')) { continue; } // Skip hidden files
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-          // 使用缓存或创建新的目录节点
-          let dirNode = this.directoryCache.get(fullPath);
-          if (!dirNode) {
-            dirNode = new DirectoryNode(entry.name, fullPath, dep, parent);
-            this.directoryCache.set(fullPath, dirNode);
-          }
-          dirs.push(dirNode);
+          // 使用统一的节点管理
+          const dirNode = this.getOrCreateNode(() => new DirectoryNode(entry.name, fullPath, dep, parent));
+          dirs.push(dirNode as DirectoryNode);
         } else {
-          // 使用缓存或创建新的文件节点
-          let fileNode = this.fileCache.get(fullPath);
-          if (!fileNode) {
-            fileNode = new FileNode(entry.name, fullPath, dep, parent);
-            this.fileCache.set(fullPath, fileNode);
-          }
-          files.push(fileNode);
+          // 使用统一的节点管理
+          const fileNode = this.getOrCreateNode(() => new FileNode(entry.name, fullPath, dep, parent));
+          files.push(fileNode as FileNode);
         }
       }
       dirs.sort((a, b) => a.label.localeCompare(b.label));

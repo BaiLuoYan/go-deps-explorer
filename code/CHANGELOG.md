@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5] - 2026-03-03
+
+### Fixed
+- Completely reworked Cmd+Click jump tracking: unified node management with `nodeMap` ensures reveal works even when tree was never expanded
+- `findNodeForFile()` now proactively builds the full node chain (root → category → dependency) when nodes aren't cached
+
 ## [0.1.4] - 2026-03-03
 
 ### Fixed

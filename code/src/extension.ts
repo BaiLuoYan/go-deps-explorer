@@ -28,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const treeView = vscode.window.createTreeView('goDepsExplorer', {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
+    canSelectMany: false,
   });
   context.subscriptions.push(treeView);
 

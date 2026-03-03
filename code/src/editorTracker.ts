@@ -6,11 +6,13 @@ import { getGopath } from './utils';
 
 export class EditorTracker {
   private disposable: vscode.Disposable;
+  private outputChannel: vscode.OutputChannel;
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
   ) {
+    this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
     this.disposable = vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) { this.onEditorChanged(editor); }
     });
@@ -18,37 +20,31 @@ export class EditorTracker {
 
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
     const filePath = editor.document.uri.fsPath;
-    if (!this.isDependencyFile(filePath)) { return; }
+    this.outputChannel.appendLine(`Editor changed: ${filePath}`);
+    
+    if (!this.isDependencyFile(filePath)) { 
+      this.outputChannel.appendLine('Not a dependency file, skipping');
+      return; 
+    }
 
     const result = this.treeProvider.findNodeForFile(filePath);
-    if (!result?.depNode) { return; }
+    if (!result?.depNode) { 
+      this.outputChannel.appendLine('No dependency node found for file');
+      return; 
+    }
+
+    this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
 
     try {
-      // 首先 reveal 到依赖节点层级（确保依赖包展开）
+      // 直接 reveal 依赖节点，让 VSCode 处理展开
       await this.treeView.reveal(result.depNode, {
-        select: false,
+        select: true,
         focus: false,
-        expand: 1,
+        expand: 3, // 展开到文件层级
       });
-
-      // 如果找到了具体的文件节点，再 reveal 到文件
-      if (result.fileNode) {
-        await this.treeView.reveal(result.fileNode, {
-          select: true,
-          focus: false,
-          expand: false,
-        });
-      } else {
-        // 如果只有依赖节点，选中它并展开
-        await this.treeView.reveal(result.depNode, {
-          select: true,
-          focus: false,
-          expand: 3,
-        });
-      }
+      this.outputChannel.appendLine('Successfully revealed dependency node');
     } catch (e) {
-      // reveal may fail if node not yet in tree; ignore silently
-      console.debug('EditorTracker reveal failed:', e);
+      this.outputChannel.appendLine(`Reveal failed: ${e}`);
     }
   }
 
@@ -72,6 +68,7 @@ export class EditorTracker {
 
   dispose(): void {
     this.disposable.dispose();
+    this.outputChannel.dispose();
   }
 }
 

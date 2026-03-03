@@ -2,7 +2,7 @@
   "name": "go-deps-explorer",
   "displayName": "Go Deps Explorer",
   "description": "Browse and explore Go project dependencies in VS Code",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "BaiLuoYan",
   "license": "MIT",
   "engines": {
