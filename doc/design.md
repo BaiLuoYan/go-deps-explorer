@@ -92,6 +92,7 @@ class GoModParser {
   private async runGoList(cwd: string): Promise<DependencyInfo[]>;
   
   // 内部：执行 go list -json ./... 获取项目 import 列表
+  // v0.1.12 变更：收集 pkg.Imports、TestImports、XTestImports、Deps 四个字段的所有标准库包
   private async runGoListImports(cwd: string): Promise<string[]>;
   
   // 判断包路径是否为标准库包
