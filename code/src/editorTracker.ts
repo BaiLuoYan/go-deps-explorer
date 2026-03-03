@@ -21,16 +21,31 @@ export class EditorTracker {
     if (!this.isDependencyFile(filePath)) { return; }
 
     const result = this.treeProvider.findNodeForFile(filePath);
-    if (!result) { return; }
+    if (!result?.depNode) { return; }
 
-    // We can't easily do deep reveal without building the full path chain.
-    // Instead, reveal the dependency node itself (which is the most useful action).
     try {
+      // 首先 reveal 到依赖节点层级（确保依赖包展开）
       await this.treeView.reveal(result.depNode, {
-        select: true,
+        select: false,
         focus: false,
-        expand: 3, // Expand up to 3 levels deep
+        expand: 1,
       });
+
+      // 如果找到了具体的文件节点，再 reveal 到文件
+      if (result.fileNode) {
+        await this.treeView.reveal(result.fileNode, {
+          select: true,
+          focus: false,
+          expand: false,
+        });
+      } else {
+        // 如果只有依赖节点，选中它并展开
+        await this.treeView.reveal(result.depNode, {
+          select: true,
+          focus: false,
+          expand: 3,
+        });
+      }
     } catch (e) {
       // reveal may fail if node not yet in tree; ignore silently
       console.debug('EditorTracker reveal failed:', e);

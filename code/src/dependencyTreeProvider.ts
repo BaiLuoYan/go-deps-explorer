@@ -15,6 +15,12 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   private projects: Map<string, DependencyInfo[]> = new Map();
   private isWorkspace = false;
 
+  // 节点缓存 - 确保 reveal 能找到真实的节点引用
+  private categoryCache = new Map<string, CategoryNode>();
+  private dependencyCache = new Map<string, DependencyNode>();
+  private directoryCache = new Map<string, DirectoryNode>();
+  private fileCache = new Map<string, FileNode>();
+
   constructor(
     private parser: GoModParser,
     private config: ConfigManager,
@@ -34,6 +40,12 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   }
 
   refresh(): void {
+    // 清空所有缓存
+    this.categoryCache.clear();
+    this.dependencyCache.clear();
+    this.directoryCache.clear();
+    this.fileCache.clear();
+    
     // Re-scan all projects
     const roots = Array.from(this.projects.keys());
     this.projects.clear();
@@ -122,7 +134,15 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         .sort((a, b) => a.path.localeCompare(b.path))
         .map(dep => {
           const sourcePath = this.parser.getSourcePath(dep, element.projectRoot);
-          return new DependencyNode(dep, sourcePath, element);
+          const cacheKey = `${dep.path}@${dep.version}`;
+          
+          // 使用缓存或创建新节点
+          let depNode = this.dependencyCache.get(cacheKey);
+          if (!depNode) {
+            depNode = new DependencyNode(dep, sourcePath, element);
+            this.dependencyCache.set(cacheKey, depNode);
+          }
+          return depNode;
         });
     }
 
@@ -145,21 +165,31 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     return undefined;
   }
 
-  /** Find and return the FileNode for a given absolute file path */
-  findNodeForFile(filePath: string): { depNode: DependencyNode; relativePath: string } | undefined {
+  /** Find and return the cached nodes for a given absolute file path */
+  findNodeForFile(filePath: string): { depNode?: DependencyNode; fileNode?: FileNode } | undefined {
+    // 首先检查是否已有缓存的文件节点
+    const cachedFileNode = this.fileCache.get(filePath);
+    if (cachedFileNode) {
+      // 找到对应的依赖节点
+      const depCacheKey = `${cachedFileNode.dep.path}@${cachedFileNode.dep.version}`;
+      const cachedDepNode = this.dependencyCache.get(depCacheKey);
+      if (cachedDepNode) {
+        return { depNode: cachedDepNode, fileNode: cachedFileNode };
+      }
+    }
+
+    // 如果文件节点未缓存，尝试找到对应的依赖节点
     for (const [root, deps] of this.projects) {
       for (const dep of deps) {
         const sourcePath = this.parser.getSourcePath(dep, root);
         if (filePath.startsWith(sourcePath + path.sep) || filePath === sourcePath) {
-          const relativePath = path.relative(sourcePath, filePath);
-          // Build a temporary DependencyNode for reveal
-          const category = dep.indirect ? 'indirect' : 'direct';
-          const catNode = new CategoryNode(
-            category === 'direct' ? '直接依赖' : '间接依赖',
-            category, root, deps, undefined,
-          );
-          const depNode = new DependencyNode(dep, sourcePath, catNode);
-          return { depNode, relativePath };
+          const depCacheKey = `${dep.path}@${dep.version}`;
+          const cachedDepNode = this.dependencyCache.get(depCacheKey);
+          if (cachedDepNode) {
+            return { depNode: cachedDepNode };
+          }
+          // 如果依赖节点也未缓存，说明树未展开到该层级，先返回 undefined
+          return undefined;
         }
       }
     }
@@ -176,10 +206,22 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const indirectDeps = deps.filter(d => d.indirect);
 
     if (directDeps.length > 0) {
-      categories.push(new CategoryNode('直接依赖', 'direct', projectRoot, deps, parent));
+      const cacheKey = `${projectRoot}:direct`;
+      let categoryNode = this.categoryCache.get(cacheKey);
+      if (!categoryNode) {
+        categoryNode = new CategoryNode('直接依赖', 'direct', projectRoot, deps, parent);
+        this.categoryCache.set(cacheKey, categoryNode);
+      }
+      categories.push(categoryNode);
     }
     if (this.config.showIndirect && indirectDeps.length > 0) {
-      categories.push(new CategoryNode('间接依赖', 'indirect', projectRoot, deps, parent));
+      const cacheKey = `${projectRoot}:indirect`;
+      let categoryNode = this.categoryCache.get(cacheKey);
+      if (!categoryNode) {
+        categoryNode = new CategoryNode('间接依赖', 'indirect', projectRoot, deps, parent);
+        this.categoryCache.set(cacheKey, categoryNode);
+      }
+      categories.push(categoryNode);
     }
     return categories;
   }
@@ -194,9 +236,21 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         if (entry.name.startsWith('.')) { continue; } // Skip hidden files
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-          dirs.push(new DirectoryNode(entry.name, fullPath, dep, parent));
+          // 使用缓存或创建新的目录节点
+          let dirNode = this.directoryCache.get(fullPath);
+          if (!dirNode) {
+            dirNode = new DirectoryNode(entry.name, fullPath, dep, parent);
+            this.directoryCache.set(fullPath, dirNode);
+          }
+          dirs.push(dirNode);
         } else {
-          files.push(new FileNode(entry.name, fullPath, dep, parent));
+          // 使用缓存或创建新的文件节点
+          let fileNode = this.fileCache.get(fullPath);
+          if (!fileNode) {
+            fileNode = new FileNode(entry.name, fullPath, dep, parent);
+            this.fileCache.set(fullPath, fileNode);
+          }
+          files.push(fileNode);
         }
       }
       dirs.sort((a, b) => a.label.localeCompare(b.label));
