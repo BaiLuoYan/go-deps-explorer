@@ -19,9 +19,10 @@
 | F1 | 在 Explorer 面板下方新增「Go Dependencies」面板，显示当前 Go 项目的所有依赖 | P0 |
 | F1.1 | 依赖来源为 `go.mod` + `go.sum`，通过 `go list -m -json all` 或解析 go.mod 获取 | P0 |
 | F1.2 | 同时显示**直接依赖**和**间接依赖**（传递依赖） | P0 |
-| F1.3 | 直接依赖和间接依赖需要**视觉区分**（图标/颜色/分组均可） | P0 |
+| F1.3 | 分类标签使用英文：**Direct Dependencies** / **Indirect Dependencies** | P0 |
 | F1.4 | 每个依赖包根节点显示格式：`包名@版本号`（如 `github.com/gin-gonic/gin@v1.9.1`） | P0 |
-| F1.5 | 鼠标 hover 依赖包根节点时，显示详细信息 tooltip（URL、版本、是否直接依赖、replace 信息等） | P0 |
+| F1.5 | 鼠标 hover 依赖包根节点时，显示详细信息 tooltip（英文标签，支持正确换行） | P0 |
+| F1.6 | 源码不可用的依赖显示 `(source not available)` 且不可展开 | P0 |
 
 ### 2.2 依赖包目录浏览 [P0 - 必须]
 
@@ -30,6 +31,8 @@
 | F2 | 点击依赖包可展开其完整目录结构（懒加载） | P0 |
 | F2.1 | 依赖包源码路径：优先检查项目 `vendor/` 目录，不存在则从 `$GOPATH/pkg/mod/` 读取 | P0 |
 | F2.2 | 点击目录中的文件时，以**只读方式**在编辑器中打开文件内容 | P0 |
+| F2.3 | go.mod 解析失败时，使用 fallback 解析器支持多 require 块和单行 require | P0 |
+| F2.4 | 通过 Output Channel "Go Deps Explorer" 提供诊断日志 | P0 |
 
 ### 2.3 工作空间支持 [P0 - 必须]
 
@@ -59,8 +62,9 @@ project2/
 | ID | 功能描述 | 优先级 |
 |----|---------|--------|
 | F4 | 用户按住 Cmd（Mac）/ Ctrl（Win/Linux）点击代码跳转到依赖包文件时，自动在依赖树中**定位到该文件所在的依赖包** | P0 |
-| F4.1 | 展开该依赖包的目录树，直到目标文件所在位置 | P0 |
+| F4.1 | **精确路径展开**：只展开到目标文件路径，不展开所有目录 | P0 |
 | F4.2 | 高亮/选中目标文件节点 | P0 |
+| F4.3 | **多项目工作空间**：正确定位到用户跳转来源的项目（记住 lastProjectRoot） | P0 |
 
 ### 2.5 自动刷新 [P0 - 必须]
 
@@ -104,7 +108,15 @@ project2/
 | `goDepsExplorer.showIndirect` | boolean | true | 是否显示间接依赖 |
 | `goDepsExplorer.vendorFirst` | boolean | false | 优先使用 vendor 目录 |
 
-## 6. 验收标准
+## 7. 版本发布需求
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F8 | 每个版本需要创建 git tag (annotated tag) | P1 |
+| F8.1 | 每个版本需要创建对应的 GitHub Release | P1 |
+| F8.2 | 所有用户可见文本（界面、提示、错误信息）统一使用英文 | P0 |
+
+## 8. 验收标准
 
 1. ✅ 打开包含 go.mod 的项目，侧边栏自动显示依赖树
 2. ✅ 直接依赖和间接依赖有明确视觉区分

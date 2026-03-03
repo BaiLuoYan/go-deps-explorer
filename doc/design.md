@@ -79,11 +79,16 @@ interface DependencyInfo {
 }
 
 class GoModParser {
+  private outputChannel: vscode.OutputChannel;  // 提供诊断日志
+
   // 解析单个项目的所有依赖
   async parseDependencies(projectRoot: string): Promise<DependencyInfo[]>;
   
   // 内部：执行 go list -m -json all
   private async runGoList(cwd: string): Promise<DependencyInfo[]>;
+  
+  // fallback 解析器：支持多 require 块和单行 require
+  private async parseGoModFallback(projectRoot: string): Promise<DependencyInfo[]>;
   
   // 内部：判断 vendor 是否存在且有效
   private async hasVendor(projectRoot: string): Promise<boolean>;
@@ -131,6 +136,9 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   
+  // 统一的节点管理器 - 确保每个节点只有一个实例
+  private nodeMap = new Map<string, TreeNode>();
+  
   // 返回树节点的子节点
   getChildren(element?: TreeNode): Promise<TreeNode[]>;
   
@@ -144,7 +152,13 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   refresh(): void;
   
   // 定位到指定文件路径（供 EditorTracker 调用）
-  revealFile(filePath: string): Promise<void>;
+  findNodeForFile(filePath: string): { depNode?: DependencyNode; fileNode?: FileNode };
+  
+  // 构建完整节点链（含目录和文件）
+  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode };
+  
+  // 获取或创建节点，确保单例
+  private getOrCreateNode<T extends TreeNode>(factory: () => T): T;
 }
 ```
 
@@ -189,6 +203,7 @@ interface BaseNode {
   type: NodeType;
   label: string;
   parent?: TreeNode;
+  id: string;                // 每个 TreeNode class 都有唯一 id 字段
 }
 
 // 项目节点（工作空间模式）
@@ -253,7 +268,7 @@ const SCHEME = 'go-dep';
 
 class DepFileContentProvider implements vscode.TextDocumentContentProvider {
   provideTextDocumentContent(uri: vscode.Uri): string {
-    const fsPath = uri.query;  // 真实文件路径存在 query 中
+    const fsPath = decodeURIComponent(uri.query);  // 使用 decodeURIComponent 解码路径
     return fs.readFileSync(fsPath, 'utf8');
   }
 }
@@ -273,10 +288,14 @@ async openFile(fsPath: string) {
 **实现**:
 ```typescript
 class EditorTracker {
+  private outputChannel: vscode.OutputChannel;
+  private lastProjectRoot: string | undefined;  // 追踪用户最后访问的项目根目录
+
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider
   ) {
+    this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
     // 监听 active editor 变化
     vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) this.onEditorChanged(editor);
@@ -286,10 +305,19 @@ class EditorTracker {
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
     const filePath = editor.document.uri.fsPath;
     
+    // 跟踪 lastProjectRoot：从非依赖文件中记住用户的项目根目录
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    if (workspaceFolder) {
+      this.lastProjectRoot = workspaceFolder.uri.fsPath;
+    }
+
     // 判断文件是否在某个依赖包路径下
-    // 检查路径是否匹配 $GOPATH/pkg/mod/... 或 vendor/...
     if (this.isDependencyFile(filePath)) {
-      await this.treeProvider.revealFile(filePath);
+      // reveal fileNode 而非 depNode，实现精确展开
+      const result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+      if (result?.fileNode) {
+        await this.treeView.reveal(result.fileNode, { select: true, focus: false, expand: false });
+      }
     }
   }
   
@@ -612,9 +640,10 @@ function getSourcePath(dep: DependencyInfo, projectRoot: string, config: ConfigM
 ```typescript
 // 依赖包根节点
 getTreeItem(node: DependencyNode): vscode.TreeItem {
+  const hasSource = fs.existsSync(node.sourcePath);
   const item = new vscode.TreeItem(
     `${node.dep.path}@${node.dep.version}`,
-    vscode.TreeItemCollapsibleState.Collapsed
+    hasSource ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
   );
   
   // 图标区分直接/间接
@@ -622,19 +651,27 @@ getTreeItem(node: DependencyNode): vscode.TreeItem {
     ? new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'))
     : new vscode.ThemeIcon('package');
   
-  // Tooltip 详细信息
+  // 源码不存在时显示说明
+  if (!hasSource) {
+    item.description = '(source not available)';
+  }
+  
+  // Tooltip 详细信息（英文标签 + 正确换行）
   const lines = [
     `**${node.dep.path}**`,
-    `版本: ${node.dep.version}`,
-    `类型: ${node.dep.indirect ? '间接依赖' : '直接依赖'}`,
-    `路径: ${node.sourcePath}`,
+    ``,
+    `Version: \`${node.dep.version}\`  `,
+    `Type: ${node.dep.indirect ? 'Indirect' : 'Direct'}  `,
+    `Path: \`${node.sourcePath}\`  `,
   ];
   if (node.dep.replace) {
-    lines.push(`Replace: ${node.dep.replace.path}${node.dep.replace.version ? '@' + node.dep.replace.version : ''}`);
-    if (node.dep.replace.dir) lines.push(`Replace 路径: ${node.dep.replace.dir}`);
+    lines.push(``);
+    lines.push(`**Replace:**  `);
+    lines.push(`→ ${node.dep.replace.path}${node.dep.replace.version ? '@' + node.dep.replace.version : ''}  `);
+    if (node.dep.replace.dir) { lines.push(`Path: \`${node.dep.replace.dir}\`  `); }
   }
-  if (node.dep.goVersion) lines.push(`Go 版本: ${node.dep.goVersion}`);
-  item.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+  if (node.dep.goVersion) lines.push(`Go Version: \`${node.dep.goVersion}\`  `);
+  item.tooltip = new vscode.MarkdownString(lines.join('\n'));
   
   // contextValue 用于菜单控制
   item.contextValue = node.dep.indirect ? 'dependency-indirect' : 'dependency-direct';
