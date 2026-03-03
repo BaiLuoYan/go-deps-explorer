@@ -104,14 +104,17 @@ export class GoModParser {
             const packages = parseJsonStream(stdout);
             const stdlibImports = new Set<string>();
             
-            // Extract all imports from all packages
+            // Extract all imports from all packages (including test imports and transitive deps)
             for (const pkg of packages) {
-              if (pkg.Imports) {
-                for (const imp of pkg.Imports) {
-                  // Standard library packages don't contain dots or are well-known paths
-                  if (isStandardLibraryPackage(imp)) {
-                    stdlibImports.add(imp);
-                  }
+              const allImports = [
+                ...(pkg.Imports || []),
+                ...(pkg.TestImports || []),
+                ...(pkg.XTestImports || []),
+                ...(pkg.Deps || []),
+              ];
+              for (const imp of allImports) {
+                if (isStandardLibraryPackage(imp)) {
+                  stdlibImports.add(imp);
                 }
               }
             }

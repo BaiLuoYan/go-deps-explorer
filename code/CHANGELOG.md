@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.12] - 2026-03-03
+
+### Fixed
+- Standard library packages now fully collected: includes TestImports, XTestImports, and transitive Deps (not just direct Imports)
+
 ## [0.1.11] - 2026-03-03
 
 ### Fixed
