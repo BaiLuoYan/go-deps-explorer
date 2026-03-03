@@ -105,6 +105,8 @@ class GoModParser {
   private async hasVendor(projectRoot: string): Promise<boolean>;
   
   // 获取依赖包的源码路径
+  // v0.1.14 修复：go list 的 Dir 字段在有 replace 时指向替换后路径
+  // 当 handleReplace=false 且存在 replace 时，跳过被污染的 dep.dir，使用 GOPATH 拼接原始路径
   getSourcePath(dep: DependencyInfo, projectRoot: string, useVendor: boolean): string;
   
   // 获取标准库包的源码路径（新增）
@@ -129,7 +131,12 @@ go list -m -json all
 if (config.vendorFirst && vendor/ 存在 && vendor/modules.txt 存在):
     sourcePath = projectRoot/vendor/{modulePath}
 else:
-    sourcePath = dep.Dir  // go list 返回的路径（通常是 $GOPATH/pkg/mod/...）
+    // v0.1.14 修复：当 handleReplace=false 且存在 replace 时，
+    // dep.dir 已被 go list 污染指向替换后路径，需跳过使用 GOPATH 拼接原始路径
+    if (config.handleReplace == false && dep.replace 存在):
+        sourcePath = GOPATH/pkg/mod/{原始path@version}
+    else:
+        sourcePath = dep.Dir  // go list 返回的路径（通常是 $GOPATH/pkg/mod/...）
 ```
 
 **replace 处理**:
@@ -792,8 +799,8 @@ getTreeItem(node: DependencyNode): vscode.TreeItem {
   );
   
   // 图标区分直接/间接/标准库/replace
-  if (node.dep.replace) {
-    // Replace 依赖使用特殊图标
+  if (node.dep.replace && config.handleReplace) {
+    // v0.1.14 修复：Replace 依赖图标和描述仅在 handleReplace=true 时显示
     item.iconPath = new vscode.ThemeIcon('arrow-swap');
     item.description = '→ replaced';
   } else if (node.category === 'stdlib') {

@@ -108,6 +108,10 @@
 
 | **TC-NEW-15** | **多项目工作空间中同一标准库文件在不同项目间 Cmd+Click 切换定位验证（v0.1.13 修复）** | **工作空间包含项目A和项目B，两者都使用 fmt 包。用户先在项目A中 Cmd+Click 跳转到 fmt/print.go，再在项目B中跳转到同一文件** | **每次跳转都正确定位到对应项目的 fmt 标准库节点，不会因为缓存导致总是定位到第一个项目** |
 
+| **TC-NEW-16** | **handleReplace=false 时依赖显示原始路径且无 replace 图标（v0.1.14 新增）** | **go.mod 包含 replace github.com/user/pkg => ../local/pkg，设置 handleReplace=false** | **该依赖包在树中显示原始路径 github.com/user/pkg@version，无 arrow-swap 图标，无 "→ replaced" 描述** |
+
+| **TC-NEW-17** | **handleReplace=true 时依赖显示替换路径和 replace 图标（v0.1.14 验证）** | **go.mod 包含 replace github.com/user/pkg => ../local/pkg，设置 handleReplace=true** | **该依赖包在树中显示替换后路径，带有 arrow-swap 图标和 "→ replaced" 描述** |
+
 ### 2.7 新增功能测试用例 (v0.1.11)
 
 | 测试编号 | 测试用例描述 | 输入数据 | 预期结果 |
