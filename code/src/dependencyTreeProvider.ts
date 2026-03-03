@@ -98,7 +98,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         );
         
         // Set icon based on dependency type and replace status
-        if (element.dep.replace) {
+        if (element.dep.replace && this.config.handleReplace) {
           item.iconPath = new vscode.ThemeIcon('arrow-swap');
           item.description = '→ replaced';
         } else if (element.dep.version === 'stdlib') {

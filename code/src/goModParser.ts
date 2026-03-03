@@ -64,12 +64,23 @@ export class GoModParser {
   }
 
   getSourcePath(dep: DependencyInfo, projectRoot: string): string {
-    const effectiveDep = (this.config.handleReplace && dep.replace) ? dep.replace : dep;
+    const useReplace = this.config.handleReplace && dep.replace;
+    const effectiveDep = useReplace ? dep.replace! : dep;
 
     // Vendor first
     if (this.config.vendorFirst) {
       const vendorPath = path.join(projectRoot, 'vendor', effectiveDep.path);
       if (fs.existsSync(vendorPath)) { return vendorPath; }
+    }
+
+    // When handleReplace=false but dep has replace, dep.dir points to replaced location
+    // In that case, skip dep.dir and use GOPATH fallback for original module
+    if (!useReplace && dep.replace && effectiveDep.dir) {
+      // dep.dir is tainted by replace, use GOPATH for original path@version
+      const gopath = getGopath();
+      const originalPath = path.join(gopath, 'pkg', 'mod', `${dep.path}@${dep.version}`);
+      if (fs.existsSync(originalPath)) { return originalPath; }
+      // If original doesn't exist in cache, fall through to dep.dir anyway
     }
 
     // go list returned dir

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14] - 2026-03-03
+
+### Fixed
+- `handleReplace` setting now works correctly: when disabled, dependencies show original path/version and source location instead of replaced ones
+- Replace arrow-swap icon and "→ replaced" description only shown when `handleReplace` is enabled
+- `getSourcePath()`: when `handleReplace=false`, skip `dep.dir` (which `go list` sets to replaced path) and use GOPATH for original module
+
 ## [0.1.13] - 2026-03-03
 
 ### Fixed
