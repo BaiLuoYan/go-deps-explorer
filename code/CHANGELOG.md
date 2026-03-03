@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11] - 2026-03-03
+
+### Fixed
+- Cmd+Click on Go standard library code now correctly locates and reveals the package in the dependency tree
+- Fixed `isDependencyFile()`: replaced broken async Promise logic with cached `$GOROOT/src` path (initialized once via `go env GOROOT`)
+- `findNodeForFile()` now also searches stdlib dependencies, not just module dependencies
+
 ## [0.1.10] - 2026-03-03
 
 ### Added

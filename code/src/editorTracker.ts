@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { exec } from 'child_process';
 import { DependencyTreeProvider } from './dependencyTreeProvider';
 import { TreeNode, FileNode } from './models';
 import { getGopath } from './utils';
@@ -9,6 +10,7 @@ export class EditorTracker {
   private disposable: vscode.Disposable;
   private outputChannel: vscode.OutputChannel;
   private lastProjectRoot: string | undefined;
+  private gorootSrc: string | undefined;
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
@@ -17,6 +19,33 @@ export class EditorTracker {
     this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
     this.disposable = vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) { this.onEditorChanged(editor); }
+    });
+    // Cache GOROOT on init
+    this.initGoroot();
+  }
+
+  private initGoroot(): void {
+    exec('go env GOROOT', (error, stdout) => {
+      if (!error && stdout.trim()) {
+        this.gorootSrc = path.join(stdout.trim(), 'src');
+        this.outputChannel.appendLine(`GOROOT/src: ${this.gorootSrc}`);
+      } else {
+        // Fallback
+        const goroot = process.env.GOROOT;
+        if (goroot) {
+          this.gorootSrc = path.join(goroot, 'src');
+        } else {
+          // Common paths
+          const candidates = ['/usr/local/go/src', '/usr/lib/go/src'];
+          const fs = require('fs');
+          for (const p of candidates) {
+            if (fs.existsSync(p)) { this.gorootSrc = p; break; }
+          }
+        }
+        if (this.gorootSrc) {
+          this.outputChannel.appendLine(`GOROOT/src (fallback): ${this.gorootSrc}`);
+        }
+      }
     });
   }
 
@@ -85,34 +114,8 @@ export class EditorTracker {
     }
 
     // Check GOROOT/src for standard library files
-    return new Promise((resolve) => {
-      const { exec } = require('child_process');
-      exec('go env GOROOT', (error: any, stdout: string, _stderr: any) => {
-        if (error) {
-          resolve(false);
-          return;
-        }
-        const goroot = stdout.trim();
-        const gorootSrc = path.join(goroot, 'src');
-        resolve(filePath.startsWith(gorootSrc));
-      });
-    }) as any || false; // Fallback to synchronous check
-
-    // Synchronous fallback - check common GOROOT locations
-    const commonGorootPaths: string[] = [
-      '/usr/local/go/src',
-      '/usr/lib/go/src',
-    ];
-    
-    const goroot: string | undefined = process.env.GOROOT;
-    if (goroot !== undefined) {
-      commonGorootPaths.push(path.join(goroot as string, 'src'));
-    }
-
-    for (const gorootSrc of commonGorootPaths) {
-      if (filePath.startsWith(gorootSrc)) {
-        return true;
-      }
+    if (this.gorootSrc && filePath.startsWith(this.gorootSrc)) {
+      return true;
     }
 
     return false;

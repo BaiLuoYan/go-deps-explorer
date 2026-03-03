@@ -234,6 +234,16 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       }
     }
 
+    // Also search stdlib deps
+    for (const [root, stdlibDeps] of this.stdlibDeps) {
+      for (const dep of stdlibDeps) {
+        const sourcePath = dep.dir || '';
+        if (sourcePath && (filePath.startsWith(sourcePath + path.sep) || filePath === sourcePath)) {
+          candidates.push({ root, dep, sourcePath });
+        }
+      }
+    }
+
     // 如果有多个匹配项且指定了首选项目根目录，优先返回匹配的项目
     if (candidates.length > 1 && preferredProjectRoot) {
       const preferred = candidates.find(c => c.root === preferredProjectRoot);
