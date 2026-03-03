@@ -5,6 +5,7 @@ import { exec } from 'child_process';
 import { DependencyInfo } from './models';
 import { ConfigManager } from './configManager';
 import { getGopath } from './utils';
+import { parseJsonStream, isStandardLibraryPackage, parseGoModText } from './pure';
 
 const outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
 
@@ -59,31 +60,7 @@ export class GoModParser {
     const goModPath = path.join(projectRoot, 'go.mod');
     if (!fs.existsSync(goModPath)) { return []; }
     const content = fs.readFileSync(goModPath, 'utf8');
-    const deps: DependencyInfo[] = [];
-
-    // Match single-line: require github.com/foo v1.0.0
-    const singleRegex = /^require\s+([\w./\-@]+)\s+(v[\w.\-+]+)/gm;
-    let match: RegExpExecArray | null;
-    while ((match = singleRegex.exec(content)) !== null) {
-      deps.push({ path: match[1], version: match[2], indirect: false });
-    }
-
-    // Match block: require ( ... )
-    const blockRegex = /require\s*\(([\s\S]*?)\)/g;
-    let blockMatch: RegExpExecArray | null;
-    while ((blockMatch = blockRegex.exec(content)) !== null) {
-      const block = blockMatch[1];
-      const lineRegex = /^\s*([\w./\-@]+)\s+(v[\w.\-+]+)(\s*\/\/\s*indirect)?/gm;
-      let lineMatch: RegExpExecArray | null;
-      while ((lineMatch = lineRegex.exec(block)) !== null) {
-        deps.push({
-          path: lineMatch[1],
-          version: lineMatch[2],
-          indirect: !!lineMatch[3],
-        });
-      }
-    }
-    return deps;
+    return parseGoModText(content);
   }
 
   getSourcePath(dep: DependencyInfo, projectRoot: string): string {
@@ -132,7 +109,7 @@ export class GoModParser {
               if (pkg.Imports) {
                 for (const imp of pkg.Imports) {
                   // Standard library packages don't contain dots or are well-known paths
-                  if (this.isStandardLibraryPackage(imp)) {
+                  if (isStandardLibraryPackage(imp)) {
                     stdlibImports.add(imp);
                   }
                 }
@@ -162,103 +139,8 @@ export class GoModParser {
     });
   }
 
-  private isStandardLibraryPackage(packagePath: string): boolean {
-    // Skip internal and local packages
-    if (packagePath.startsWith('./') || packagePath.startsWith('../')) {
-      return false;
-    }
-    
-    // Well-known standard library packages
-    const stdlibPrefixes = [
-      'archive/',
-      'bufio',
-      'builtin', 
-      'bytes',
-      'compress/',
-      'container/',
-      'context',
-      'crypto/',
-      'database/',
-      'debug/',
-      'embed',
-      'encoding/',
-      'errors',
-      'expvar',
-      'fmt',
-      'go/',
-      'hash/',
-      'html/',
-      'image/',
-      'index/',
-      'io/',
-      'io',
-      'log/',
-      'log',
-      'math/',
-      'math',
-      'mime/',
-      'mime',
-      'net/',
-      'net',
-      'os/',
-      'os',
-      'path/',
-      'path',
-      'plugin',
-      'reflect',
-      'regexp',
-      'runtime/',
-      'runtime',
-      'sort',
-      'strconv',
-      'strings',
-      'sync/',
-      'sync',
-      'syscall',
-      'testing/',
-      'testing',
-      'text/',
-      'time/',
-      'time',
-      'unicode/',
-      'unicode',
-      'unsafe'
-    ];
-    
-    // Check if package matches any standard library pattern
-    for (const prefix of stdlibPrefixes) {
-      if (packagePath === prefix.replace('/', '') || packagePath.startsWith(prefix)) {
-        return true;
-      }
-    }
-    
-    // Also check if package name doesn't contain dots (simple heuristic)
-    return !packagePath.includes('.') && !packagePath.includes('/');
-  }
-
   hasVendor(projectRoot: string): boolean {
     const vendorModules = path.join(projectRoot, 'vendor', 'modules.txt');
     return fs.existsSync(vendorModules);
   }
-}
-
-/** Parse a stream of JSON objects (go list output) */
-export function parseJsonStream(text: string): any[] {
-  const results: any[] = [];
-  let depth = 0;
-  let start = -1;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') {
-      if (depth === 0) { start = i; }
-      depth++;
-    }
-    if (text[i] === '}') {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        results.push(JSON.parse(text.slice(start, i + 1)));
-        start = -1;
-      }
-    }
-  }
-  return results;
 }

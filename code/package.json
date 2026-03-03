@@ -8,8 +8,12 @@
   "engines": {
     "vscode": "^1.75.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["workspaceContains:**/go.mod"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/go.mod"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "views": {
@@ -68,6 +72,7 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
+    "test:unit": "npx tsx test/unit-tests.ts",
     "package": "vsce package",
     "publish": "vsce publish"
   },
@@ -83,6 +88,7 @@
     "eslint": "^8.56.0",
     "mocha": "^10.2.0",
     "sinon": "^17.0.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   }
 }

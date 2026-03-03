@@ -3,6 +3,7 @@ import * as path from 'path';
 import { DependencyTreeProvider } from './dependencyTreeProvider';
 import { TreeNode, FileNode } from './models';
 import { getGopath } from './utils';
+import { extractModuleFromPath } from './pure';
 
 export class EditorTracker {
   private disposable: vscode.Disposable;
@@ -121,25 +122,4 @@ export class EditorTracker {
     this.disposable.dispose();
     this.outputChannel.dispose();
   }
-}
-
-/** Extract module path and version from a GOPATH mod cache file path */
-export function extractModuleFromPath(filePath: string): { modulePath: string; version: string } | null {
-  const gopath = getGopath();
-  const modCache = path.join(gopath, 'pkg', 'mod') + path.sep;
-
-  if (!filePath.startsWith(modCache)) { return null; }
-
-  const relative = filePath.slice(modCache.length);
-  // Find @version: the path is like github.com/user/repo@v1.0.0/file.go
-  // But module paths can have multiple segments, @ only appears before version
-  const atIdx = relative.indexOf('@');
-  if (atIdx <= 0) { return null; }
-
-  const modulePath = relative.slice(0, atIdx);
-  const afterAt = relative.slice(atIdx + 1);
-  const sepIdx = afterAt.indexOf(path.sep);
-  const version = sepIdx > 0 ? afterAt.slice(0, sepIdx) : afterAt;
-
-  return { modulePath, version };
 }
