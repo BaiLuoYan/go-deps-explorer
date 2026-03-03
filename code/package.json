@@ -1,0 +1,88 @@
+{
+  "name": "go-deps-explorer",
+  "displayName": "Go Dependencies Explorer",
+  "description": "Browse and explore Go project dependencies in VS Code",
+  "version": "0.1.0",
+  "publisher": "go-deps-explorer",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["workspaceContains:**/go.mod"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "goDepsExplorer",
+          "name": "Go Dependencies",
+          "when": "goDepsExplorer.hasGoMod"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "goDepsExplorer.refresh",
+        "title": "Go Deps: Refresh Dependencies",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "goDepsExplorer.openFile",
+        "title": "Go Deps: Open Dependency File (Read-only)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "goDepsExplorer.refresh",
+          "when": "view == goDepsExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Go Dependencies Explorer",
+      "properties": {
+        "goDepsExplorer.handleReplace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to handle replace directives in go.mod"
+        },
+        "goDepsExplorer.showIndirect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to show indirect dependencies"
+        },
+        "goDepsExplorer.vendorFirst": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer vendor directory over GOPATH module cache"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^18.19.0",
+    "@types/sinon": "^17.0.3",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "mocha": "^10.2.0",
+    "sinon": "^17.0.1",
+    "typescript": "^5.3.3"
+  }
+}

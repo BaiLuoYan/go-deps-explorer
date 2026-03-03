@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "test": "node test/unit-tests.js",
+    "test:watch": "nodemon test/unit-tests.js",
+    "test:compile": "tsc test/unit-tests.ts --target es2020 --module commonjs --outDir . --moduleResolution node",
+    "build": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "nodemon": "^3.0.0"
+  }
+}
