@@ -165,6 +165,7 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   
   // 定位到指定文件路径（供 EditorTracker 调用）
   // preferredProjectRoot: 优先匹配的项目根目录，确保多项目工作空间下的精确定位
+  // v0.1.11 修复：增加对 stdlibDeps 的遍历，确保标准库文件也能正确定位
   findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode };
   
   // 构建完整节点链（含目录和文件）
@@ -327,16 +328,29 @@ async openFile(fsPath: string) {
 class EditorTracker {
   private outputChannel: vscode.OutputChannel;
   private lastProjectRoot: string | undefined;  // 追踪用户最后访问的项目根目录
+  private gorootSrc: string | undefined;        // 缓存 $GOROOT/src 路径
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider
   ) {
     this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
+    // 初始化 GOROOT 缓存
+    this.initGoroot();
     // 监听 active editor 变化
     vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) this.onEditorChanged(editor);
     });
+  }
+  
+  // 初始化 GOROOT 路径缓存
+  private async initGoroot(): Promise<void> {
+    try {
+      const { stdout } = await execAsync('go env GOROOT');
+      this.gorootSrc = path.join(stdout.trim(), 'src');
+    } catch (error) {
+      this.outputChannel.appendLine(`Failed to get GOROOT: ${error}`);
+    }
   }
   
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
@@ -358,15 +372,21 @@ class EditorTracker {
     }
   }
   
+  // v0.1.11 修复：同步检查依赖文件，使用缓存的 gorootSrc
   private isDependencyFile(filePath: string): boolean {
     const gopath = process.env.GOPATH || path.join(os.homedir(), 'go');
     const modCachePath = path.join(gopath, 'pkg', 'mod');
-    // 新增：支持 $GOROOT/src/ 路径检测
-    const goroot = process.env.GOROOT || path.join(os.homedir(), 'go');
-    const gorootSrcPath = path.join(goroot, 'src');
-    return filePath.startsWith(modCachePath) || 
-           filePath.includes('/vendor/') ||
-           filePath.startsWith(gorootSrcPath);
+    
+    // 检查 mod cache 路径
+    if (filePath.startsWith(modCachePath)) return true;
+    
+    // 检查 vendor 路径
+    if (filePath.includes('/vendor/')) return true;
+    
+    // v0.1.11 修复：使用缓存的 gorootSrc 同步检查标准库路径
+    if (this.gorootSrc && filePath.startsWith(this.gorootSrc)) return true;
+    
+    return false;
   }
 }
 ```
@@ -599,7 +619,87 @@ code/
 }
 ```
 
-## 6. 第三方依赖
+## 8. v0.1.11 版本变更设计说明
+
+### 8.1 EditorTracker 重构
+
+**问题描述**: 
+- `isDependencyFile()` 方法中使用了 `Promise` 来检测 `GOROOT`，但该方法返回类型为 `boolean` 而非 `async`
+- `Promise` 对象作为 truthy 值直接返回 `true`，导致后续的 fallback 逻辑永远不会执行
+
+**修复方案**:
+```typescript
+class EditorTracker {
+  private gorootSrc: string | undefined;  // 新增：缓存 GOROOT/src 路径
+
+  constructor() {
+    this.initGoroot();  // 构造时初始化 GOROOT 缓存
+  }
+
+  // 新增：异步初始化 GOROOT 路径
+  private async initGoroot(): Promise<void> {
+    try {
+      const { stdout } = await execAsync('go env GOROOT');
+      this.gorootSrc = path.join(stdout.trim(), 'src');
+    } catch (error) {
+      this.outputChannel.appendLine(`Failed to get GOROOT: ${error}`);
+    }
+  }
+
+  // 修复：同步检查，使用缓存的 gorootSrc
+  private isDependencyFile(filePath: string): boolean {
+    // ... 其他检查逻辑 ...
+    
+    // 使用缓存的 gorootSrc 而非异步获取
+    if (this.gorootSrc && filePath.startsWith(this.gorootSrc)) {
+      return true;
+    }
+    
+    return false;
+  }
+}
+```
+
+### 8.2 DependencyTreeProvider 标准库搜索
+
+**问题描述**: 
+- `findNodeForFile()` 方法只搜索 `this.projects`（模块依赖），不搜索 `this.stdlibDeps`（标准库依赖）
+- 导致跳转到标准库代码时无法在依赖树中定位
+
+**修复方案**:
+```typescript
+class DependencyTreeProvider {
+  findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode } {
+    // 原有：搜索模块依赖
+    for (const project of this.projects) {
+      // ... 搜索逻辑 ...
+    }
+    
+    // v0.1.11 新增：搜索标准库依赖
+    for (const project of this.projects) {
+      for (const stdlibDep of project.stdlibDeps) {
+        if (filePath.startsWith(stdlibDep.sourcePath)) {
+          // 找到匹配的标准库依赖，构建节点链
+          return this.buildNodeChain(project.root, stdlibDep, stdlibDep.sourcePath, filePath);
+        }
+      }
+    }
+    
+    return {};
+  }
+}
+```
+
+### 8.3 技术影响评估
+
+| 变更项 | 影响范围 | 向后兼容性 |
+|--------|----------|------------|
+| EditorTracker.gorootSrc 缓存 | EditorTracker 模块内部 | 完全兼容 |
+| initGoroot() 方法 | EditorTracker 构造流程 | 完全兼容 |
+| isDependencyFile() 同步化 | 编辑器跳转响应速度 | 性能提升 |
+| findNodeForFile() 标准库支持 | 标准库文件跳转定位 | 功能增强 |
+
+## 9. 第三方依赖
 
 | 包名 | 用途 | 说明 |
 |------|------|------|
@@ -611,7 +711,7 @@ code/
 
 **无运行时依赖**：全部使用 VSCode 内置 API 和 Node.js 标准库。
 
-## 7. 关键实现细节
+## 10. 关键实现细节
 
 ### 7.1 获取直接/间接依赖
 

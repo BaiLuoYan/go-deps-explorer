@@ -82,7 +82,7 @@ project2/
 | F4.1 | 通过 `go list -json ./...` 获取项目 import 列表，过滤出标准库包（如 fmt, net/http, os 等） | P1 |
 | F4.2 | 标准库包可以展开浏览目录结构（源码在 $GOROOT/src/ 下） | P1 |
 | F4.3 | 标准库包使用区别于普通依赖的图标（如 built-in 图标） | P1 |
-| F4.4 | Cmd+Click 跳转到标准库代码时，自动定位到依赖树中的对应包 | P1 |
+| F4.4 | Cmd+Click 跳转到标准库代码时，自动定位到依赖树中的对应包 | P0 |
 
 ### 2.7 Replace 依赖特殊图标 [P1 - 重要]
 
@@ -136,7 +136,24 @@ project2/
 | F8.1 | 每个版本需要创建对应的 GitHub Release | P1 |
 | F8.2 | 所有用户可见文本（界面、提示、错误信息）统一使用英文 | P0 |
 
-## 8. 验收标准
+## 9. v0.1.11 版本变更记录
+
+### 问题修复
+
+| 问题编号 | 问题描述 | 根本原因 | 修复方案 |
+|---------|----------|----------|----------|
+| BUG-0111-01 | Cmd+Click 跳转到 Go 标准库代码时无法定位 | editorTracker.isDependencyFile() 中用了 Promise 检测 GOROOT，但函数返回 boolean 不是 async，Promise 作为 truthy 直接返回 true | 在 EditorTracker 构造时通过 `go env GOROOT` 缓存 gorootSrc 路径，isDependencyFile 同步检查 |
+| BUG-0111-02 | 标准库文件跳转定位失败 | findNodeForFile() 只搜索 this.projects（模块依赖），不搜索 this.stdlibDeps（标准库依赖） | findNodeForFile 增加对 stdlibDeps 的遍历，确保标准库文件也能正确定位 |
+
+### 技术改进
+
+| 改进项 | 描述 | 影响范围 |
+|--------|------|----------|
+| 异步到同步重构 | EditorTracker.isDependencyFile() 方法从异步改为同步实现 | 提升跳转响应速度，消除 Promise 误用 |
+| GOROOT 缓存机制 | 新增 EditorTracker.gorootSrc 属性和 initGoroot() 方法 | 避免重复执行 `go env GOROOT` 命令 |
+| 标准库依赖搜索 | findNodeForFile() 支持搜索标准库依赖节点 | 完整支持标准库文件跳转定位 |
+
+## 10. 验收标准
 
 1. ✅ 打开包含 go.mod 的项目，侧边栏自动显示依赖树
 2. ✅ 直接依赖和间接依赖有明确视觉区分
