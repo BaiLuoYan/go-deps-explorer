@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.13] - 2026-03-03
+
+### Fixed
+- Multi-project workspace: Cmd+Click on stdlib/dependency files now reveals under the correct project, not the first project that cached the node
+- `findNodeForFile()`: when `preferredProjectRoot` is set but not cached, skip fallback to other projects' cache and go directly to `buildNodeChain` for the preferred project
+
 ## [0.1.12] - 2026-03-03
 
 ### Fixed

@@ -212,13 +212,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         const depNode = this.nodeMap.get(depId) as DependencyNode | undefined;
         return { depNode, fileNode: cachedFile };
       }
-    }
-
-    // 如果 preferred 没命中，遍历查找任意项目的缓存
-    for (const [id, node] of this.nodeMap) {
-      if (node instanceof FileNode && node.fsPath === filePath) {
-        const depNode = this.findParentDep(node);
-        return { depNode, fileNode: node };
+      // preferred 没命中缓存时，直接走 candidates 构建，不 fallback 到其他项目的缓存
+    } else {
+      // 没有 preferred 时，遍历查找任意项目的缓存
+      for (const [id, node] of this.nodeMap) {
+        if (node instanceof FileNode && node.fsPath === filePath) {
+          const depNode = this.findParentDep(node);
+          return { depNode, fileNode: node };
+        }
       }
     }
 
