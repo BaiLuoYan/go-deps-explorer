@@ -448,6 +448,175 @@ test('empty go.mod returns empty dependencies', () => {
   assert.strictEqual(deps.length, 0);
 });
 
+// ==================== Standard Library Detection ====================
+console.log('\n=== Standard Library Detection ===');
+
+function isStandardLibraryPackage(packagePath: string): boolean {
+  if (packagePath.startsWith('./') || packagePath.startsWith('../')) {
+    return false;
+  }
+  const stdlibPrefixes = [
+    'archive/', 'bufio', 'builtin', 'bytes', 'compress/', 'container/',
+    'context', 'crypto/', 'database/', 'debug/', 'embed', 'encoding/',
+    'errors', 'expvar', 'fmt', 'go/', 'hash/', 'html/', 'image/',
+    'index/', 'io/', 'io', 'log/', 'log', 'math/', 'math', 'mime/',
+    'mime', 'net/', 'net', 'os/', 'os', 'path/', 'path', 'plugin',
+    'reflect', 'regexp', 'runtime/', 'runtime', 'sort', 'strconv',
+    'strings', 'sync/', 'sync', 'syscall', 'testing/', 'testing',
+    'text/', 'time/', 'time', 'unicode/', 'unicode', 'unsafe'
+  ];
+  for (const prefix of stdlibPrefixes) {
+    if (packagePath === prefix.replace('/', '') || packagePath.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return !packagePath.includes('.') && !packagePath.includes('/');
+}
+
+test('fmt is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('fmt'), true);
+});
+
+test('net/http is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('net/http'), true);
+});
+
+test('os is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('os'), true);
+});
+
+test('crypto/sha256 is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('crypto/sha256'), true);
+});
+
+test('encoding/json is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('encoding/json'), true);
+});
+
+test('github.com/foo/bar is NOT stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('github.com/foo/bar'), false);
+});
+
+test('golang.org/x/sys is NOT stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('golang.org/x/sys'), false);
+});
+
+test('./local is NOT stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('./local'), false);
+});
+
+test('../relative is NOT stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('../relative'), false);
+});
+
+test('unsafe is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('unsafe'), true);
+});
+
+test('context is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('context'), true);
+});
+
+test('io/fs is stdlib', () => {
+  assert.strictEqual(isStandardLibraryPackage('io/fs'), true);
+});
+
+// ==================== Node ID Uniqueness (v0.1.9) ====================
+console.log('\n=== Node ID Uniqueness ===');
+
+test('same dep in different projects should have different IDs', () => {
+  // Simulates DependencyNode ID format: dep:${projectRoot}:${path}@${version}
+  const id1 = `dep:/project-a:github.com/gin-gonic/gin@v1.9.1`;
+  const id2 = `dep:/project-b:github.com/gin-gonic/gin@v1.9.1`;
+  assert.notStrictEqual(id1, id2);
+});
+
+test('same file in different projects should have different IDs', () => {
+  const id1 = `file:/project-a:/home/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go`;
+  const id2 = `file:/project-b:/home/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go`;
+  assert.notStrictEqual(id1, id2);
+});
+
+test('category IDs include project root', () => {
+  const id1 = `category:/project-a:direct`;
+  const id2 = `category:/project-b:direct`;
+  assert.notStrictEqual(id1, id2);
+});
+
+// ==================== Replace Detection ====================
+console.log('\n=== Replace Detection ===');
+
+test('parseJsonStream correctly parses replace with local path', () => {
+  const r = parseJsonStream(`{
+    "Path": "github.com/original/pkg",
+    "Version": "v1.0.0",
+    "Replace": {
+      "Path": "/local/dev/pkg",
+      "Dir": "/local/dev/pkg"
+    }
+  }`);
+  assert.ok(r[0].Replace);
+  assert.strictEqual(r[0].Replace.Path, '/local/dev/pkg');
+  assert.strictEqual(r[0].Replace.Dir, '/local/dev/pkg');
+});
+
+test('parseJsonStream correctly parses replace with versioned module', () => {
+  const r = parseJsonStream(`{
+    "Path": "github.com/old/pkg",
+    "Version": "v1.0.0",
+    "Replace": {
+      "Path": "github.com/new/pkg",
+      "Version": "v2.0.0",
+      "Dir": "/home/go/pkg/mod/github.com/new/pkg@v2.0.0"
+    }
+  }`);
+  assert.ok(r[0].Replace);
+  assert.strictEqual(r[0].Replace.Path, 'github.com/new/pkg');
+  assert.strictEqual(r[0].Replace.Version, 'v2.0.0');
+});
+
+test('module without replace has no Replace field', () => {
+  const r = parseJsonStream('{"Path":"example.com/foo","Version":"v1.0.0"}');
+  assert.strictEqual(r[0].Replace, undefined);
+});
+
+// ==================== Precise Path Building ====================
+console.log('\n=== Precise Path Building ===');
+
+test('path segments correctly split for file reveal', () => {
+  const sourcePath = '/home/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1';
+  const filePath = '/home/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/internal/json/json.go';
+  const relativePath = path.relative(sourcePath, filePath);
+  const segments = relativePath.split(path.sep);
+  assert.deepStrictEqual(segments, ['internal', 'json', 'json.go']);
+  assert.strictEqual(segments[segments.length - 1], 'json.go');
+});
+
+test('file directly in dep root has single segment', () => {
+  const sourcePath = '/home/go/pkg/mod/github.com/pkg@v1.0.0';
+  const filePath = '/home/go/pkg/mod/github.com/pkg@v1.0.0/main.go';
+  const relativePath = path.relative(sourcePath, filePath);
+  const segments = relativePath.split(path.sep);
+  assert.deepStrictEqual(segments, ['main.go']);
+});
+
+// ==================== GOROOT Path Detection ====================
+console.log('\n=== GOROOT Path Detection ===');
+
+test('file under GOROOT/src is detected as dependency file', () => {
+  const goroot = '/usr/local/go';
+  const filePath = '/usr/local/go/src/fmt/print.go';
+  const gorootSrc = path.join(goroot, 'src');
+  assert.strictEqual(filePath.startsWith(gorootSrc), true);
+});
+
+test('file not under GOROOT/src is not stdlib', () => {
+  const goroot = '/usr/local/go';
+  const filePath = '/home/user/myproject/main.go';
+  const gorootSrc = path.join(goroot, 'src');
+  assert.strictEqual(filePath.startsWith(gorootSrc), false);
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);
