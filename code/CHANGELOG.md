@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] - 2026-03-03
+
+### Fixed
+- Reveal now only expands the exact path to the target file instead of expanding all directories under the dependency
+- Build full node chain (dep → directories → file) so `reveal(fileNode)` expands only the needed path
+
 ## [0.1.6] - 2026-03-03
 
 ### Fixed

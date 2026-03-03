@@ -188,19 +188,19 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     if (candidates.length > 1 && preferredProjectRoot) {
       const preferred = candidates.find(c => c.root === preferredProjectRoot);
       if (preferred) {
-        return this.buildNodeChain(preferred.root, preferred.dep, preferred.sourcePath);
+        return this.buildNodeChain(preferred.root, preferred.dep, preferred.sourcePath, filePath);
       }
     }
 
     // 返回第一个匹配的候选项
     if (candidates.length > 0) {
-      return this.buildNodeChain(candidates[0].root, candidates[0].dep, candidates[0].sourcePath);
+      return this.buildNodeChain(candidates[0].root, candidates[0].dep, candidates[0].sourcePath, filePath);
     }
     
     return undefined;
   }
 
-  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string): { depNode: DependencyNode; fileNode?: FileNode } {
+  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode } {
     const deps = this.projects.get(root) || [];
     
     // 主动创建完整的节点链：project -> category -> dependency
@@ -225,7 +225,27 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     // 创建依赖节点
     const depNode = this.getOrCreateNode(() => new DependencyNode(dep, sourcePath, categoryNode)) as DependencyNode;
 
-    // 返回依赖节点，文件节点暂时为空（因为树可能未展开到文件层级）
+    // 如果指定了文件路径，构建从 dep 到文件的完整目录链
+    if (filePath && filePath.startsWith(sourcePath + path.sep)) {
+      const relativePath = path.relative(sourcePath, filePath);
+      const segments = relativePath.split(path.sep);
+      let currentPath = sourcePath;
+      let parentNode: TreeNode = depNode;
+
+      // 逐级创建目录节点
+      for (let i = 0; i < segments.length - 1; i++) {
+        currentPath = path.join(currentPath, segments[i]);
+        const dirNode = this.getOrCreateNode(() => new DirectoryNode(segments[i], currentPath, dep, parentNode));
+        parentNode = dirNode;
+      }
+
+      // 创建文件节点
+      const fileName = segments[segments.length - 1];
+      const fullFilePath = path.join(currentPath, fileName);
+      const fileNode = this.getOrCreateNode(() => new FileNode(fileName, fullFilePath, dep, parentNode));
+      return { depNode, fileNode };
+    }
+
     return { depNode };
   }
 

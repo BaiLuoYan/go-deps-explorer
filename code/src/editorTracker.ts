@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DependencyTreeProvider } from './dependencyTreeProvider';
-import { TreeNode } from './models';
+import { TreeNode, FileNode } from './models';
 import { getGopath } from './utils';
 
 export class EditorTracker {
@@ -40,13 +40,23 @@ export class EditorTracker {
     this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
 
     try {
-      // 直接 reveal 依赖节点，让 VSCode 处理展开
-      await this.treeView.reveal(result.depNode, {
-        select: true,
-        focus: false,
-        expand: 3, // 展开到文件层级
-      });
-      this.outputChannel.appendLine('Successfully revealed dependency node');
+      if (result.fileNode) {
+        // Reveal 到具体文件节点，VSCode 只展开该路径
+        await this.treeView.reveal(result.fileNode, {
+          select: true,
+          focus: false,
+          expand: false,
+        });
+        this.outputChannel.appendLine(`Revealed file node: ${result.fileNode.fsPath}`);
+      } else if (result.depNode) {
+        // 没有文件节点时，reveal 到依赖包
+        await this.treeView.reveal(result.depNode, {
+          select: true,
+          focus: false,
+          expand: 1,
+        });
+        this.outputChannel.appendLine('Revealed dependency node (no file node)');
+      }
     } catch (e) {
       this.outputChannel.appendLine(`Reveal failed: ${e}`);
     }
