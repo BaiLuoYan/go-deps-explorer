@@ -1,4 +1,4 @@
-# Go Dependencies Explorer
+# Go Deps Explorer
 
 Browse and explore Go project dependencies directly in VS Code.
 

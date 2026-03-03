@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.16] - 2026-03-03
+
+### Fixed
+- Unified settings section title and README heading to "Go Deps Explorer" (was "Go Dependencies Explorer")
+
 ## [0.1.15] - 2026-03-03
 
 ### Fixed
