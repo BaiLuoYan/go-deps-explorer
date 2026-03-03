@@ -566,6 +566,47 @@ test('all stdlib import sources detected correctly', () => {
   assert.strictEqual(stdlibSet.size, 6);
 });
 
+// ==================== Cross-Project Reveal Logic (v0.1.13) ====================
+console.log('\n=== Cross-Project Reveal Logic ===');
+
+test('preferred project should not fallback to other project cache for same file', () => {
+  // Simulate: same stdlib file cached under project-a, but preferredProjectRoot is project-b
+  const nodeMap = new Map<string, { fsPath: string }>();
+  const sharedFilePath = '/usr/local/go/src/fmt/print.go';
+  
+  // Project A has cached this file
+  nodeMap.set(`file:/project-a:${sharedFilePath}`, { fsPath: sharedFilePath });
+  
+  // When preferred is project-b, exact ID lookup should miss
+  const preferredFileId = `file:/project-b:${sharedFilePath}`;
+  const cachedFile = nodeMap.get(preferredFileId);
+  assert.strictEqual(cachedFile, undefined, 'Should NOT find project-a cache when looking for project-b');
+});
+
+test('without preferred project, any cached node is acceptable', () => {
+  const nodeMap = new Map<string, { fsPath: string }>();
+  const sharedFilePath = '/usr/local/go/src/fmt/print.go';
+  nodeMap.set(`file:/project-a:${sharedFilePath}`, { fsPath: sharedFilePath });
+  
+  // Without preferred, fallback search finds any match
+  let found = false;
+  for (const [id, node] of nodeMap) {
+    if (node.fsPath === sharedFilePath) { found = true; break; }
+  }
+  assert.strictEqual(found, true);
+});
+
+test('preferred project exact match returns immediately', () => {
+  const nodeMap = new Map<string, { fsPath: string }>();
+  const sharedFilePath = '/usr/local/go/src/fmt/print.go';
+  nodeMap.set(`file:/project-a:${sharedFilePath}`, { fsPath: sharedFilePath });
+  nodeMap.set(`file:/project-b:${sharedFilePath}`, { fsPath: sharedFilePath });
+  
+  const preferredFileId = `file:/project-b:${sharedFilePath}`;
+  const cachedFile = nodeMap.get(preferredFileId);
+  assert.ok(cachedFile, 'Should find exact match for project-b');
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);

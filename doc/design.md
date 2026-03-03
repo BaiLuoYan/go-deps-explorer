@@ -168,6 +168,7 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   // 定位到指定文件路径（供 EditorTracker 调用）
   // preferredProjectRoot: 优先匹配的项目根目录，确保多项目工作空间下的精确定位
   // v0.1.11 修复：增加对 stdlibDeps 的遍历，确保标准库文件也能正确定位
+  // v0.1.13 修复：当指定 preferredProjectRoot 但缓存未命中时，不 fallback 到其他项目缓存，直接通过 buildNodeChain 构建
   findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode };
   
   // 构建完整节点链（含目录和文件）
