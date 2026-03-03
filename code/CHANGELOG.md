@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.8] - 2026-03-03
+
+### Fixed
+- Workspace mode: correctly track which project the user jumped from by remembering the last non-dependency file's project root, instead of trying to resolve project from the dependency file path (which is in GOPATH, not in any workspace folder)
+
 ## [0.1.7] - 2026-03-03
 
 ### Fixed

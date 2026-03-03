@@ -7,6 +7,7 @@ import { getGopath } from './utils';
 export class EditorTracker {
   private disposable: vscode.Disposable;
   private outputChannel: vscode.OutputChannel;
+  private lastProjectRoot: string | undefined;
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
@@ -22,16 +23,21 @@ export class EditorTracker {
     const filePath = editor.document.uri.fsPath;
     this.outputChannel.appendLine(`Editor changed: ${filePath}`);
     
+    // Track the last known project root from non-dependency files
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    if (workspaceFolder) {
+      this.lastProjectRoot = workspaceFolder.uri.fsPath;
+      this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
+    }
+
     if (!this.isDependencyFile(filePath)) { 
       this.outputChannel.appendLine('Not a dependency file, skipping');
       return; 
     }
 
-    // Get the current project root from the active editor's document
-    const currentProjectRoot = this.getCurrentProjectRoot(editor.document.uri);
-    this.outputChannel.appendLine(`Current project root: ${currentProjectRoot || 'none'}`);
+    this.outputChannel.appendLine(`Using project root: ${this.lastProjectRoot || 'none'}`);
 
-    const result = this.treeProvider.findNodeForFile(filePath, currentProjectRoot);
+    const result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
     if (!result?.depNode) { 
       this.outputChannel.appendLine('No dependency node found for file');
       return; 
@@ -60,17 +66,6 @@ export class EditorTracker {
     } catch (e) {
       this.outputChannel.appendLine(`Reveal failed: ${e}`);
     }
-  }
-
-  private getCurrentProjectRoot(documentUri: vscode.Uri): string | undefined {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) {
-      return undefined;
-    }
-
-    // Find the workspace folder that contains this document
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
-    return workspaceFolder?.uri.fsPath;
   }
 
   private isDependencyFile(filePath: string): boolean {
