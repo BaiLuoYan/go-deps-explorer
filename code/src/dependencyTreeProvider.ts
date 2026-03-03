@@ -63,7 +63,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         return item;
       }
       case NodeType.Category: {
-        const label = element.category === 'direct' ? '直接依赖' : '间接依赖';
+        const label = element.category === 'direct' ? 'Direct Dependencies' : 'Indirect Dependencies';
         const count = element.dependencies.filter(d =>
           element.category === 'direct' ? !d.indirect : d.indirect
         ).length;
@@ -78,11 +78,18 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         return item;
       }
       case NodeType.Dependency: {
-        const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
+        const hasSource = fs.existsSync(element.sourcePath);
+        const item = new vscode.TreeItem(
+          element.label,
+          hasSource ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+        );
         item.iconPath = element.dep.indirect
           ? new vscode.ThemeIcon('package', new vscode.ThemeColor('disabledForeground'))
           : new vscode.ThemeIcon('package');
         item.tooltip = this.buildDepTooltip(element);
+        if (!hasSource) {
+          item.description = '(source not available)';
+        }
         item.contextValue = element.dep.indirect ? 'dependency-indirect' : 'dependency-direct';
         return item;
       }
@@ -209,7 +216,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       const cacheKey = `${projectRoot}:direct`;
       let categoryNode = this.categoryCache.get(cacheKey);
       if (!categoryNode) {
-        categoryNode = new CategoryNode('直接依赖', 'direct', projectRoot, deps, parent);
+        categoryNode = new CategoryNode('Direct Dependencies', 'direct', projectRoot, deps, parent);
         this.categoryCache.set(cacheKey, categoryNode);
       }
       categories.push(categoryNode);
@@ -218,7 +225,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       const cacheKey = `${projectRoot}:indirect`;
       let categoryNode = this.categoryCache.get(cacheKey);
       if (!categoryNode) {
-        categoryNode = new CategoryNode('间接依赖', 'indirect', projectRoot, deps, parent);
+        categoryNode = new CategoryNode('Indirect Dependencies', 'indirect', projectRoot, deps, parent);
         this.categoryCache.set(cacheKey, categoryNode);
       }
       categories.push(categoryNode);

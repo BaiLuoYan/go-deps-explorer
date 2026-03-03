@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.3] - 2026-03-03
+
+### Changed
+- Category labels changed to English: "Direct Dependencies" / "Indirect Dependencies"
+
+### Fixed
+- Indirect dependencies now show "(source not available)" when local source is missing instead of appearing expandable but empty
+- Dependencies without local source are no longer expandable (CollapsibleState.None)
+
 ## [0.1.2] - 2026-03-03
 
 ### Fixed
