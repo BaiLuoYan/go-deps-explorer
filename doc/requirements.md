@@ -78,8 +78,8 @@ project2/
 
 | ID | 功能描述 | 优先级 |
 |----|---------|--------|
-| F4 | 依赖树新增 "Standard Library" 分类节点，显示项目中 import 的所有 Go 标准库包 | P1 |
-| F4.1 | 通过 `go list -json ./...` 获取项目 import 列表，过滤出标准库包（如 fmt, net/http, os 等） | P1 |
+| F4 | 依赖树新增 "Standard Library" 分类节点，显示项目中 import 的所有 Go 标准库包（需收集所有来源的标准库包：直接导入、测试导入、传递依赖） | P1 |
+| F4.1 | 通过 `go list -json ./...` 获取项目 import 列表，过滤出标准库包（如 fmt, net/http, os 等），确保收集 Imports、TestImports、XTestImports、Deps 四个字段中的所有标准库包 | P1 |
 | F4.2 | 标准库包可以展开浏览目录结构（源码在 $GOROOT/src/ 下） | P1 |
 | F4.3 | 标准库包使用区别于普通依赖的图标（如 built-in 图标） | P1 |
 | F4.4 | Cmd+Click 跳转到标准库代码时，自动定位到依赖树中的对应包 | P0 |

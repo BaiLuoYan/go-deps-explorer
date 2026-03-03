@@ -85,6 +85,7 @@ class GoModParser {
   async parseDependencies(projectRoot: string): Promise<DependencyInfo[]>;
   
   // 解析标准库依赖（新增）
+  // v0.1.12 变更：收集 Imports + TestImports + XTestImports + Deps 四个字段
   async parseStdlibDeps(projectRoot: string): Promise<DependencyInfo[]>;
   
   // 内部：执行 go list -m -json all

@@ -513,6 +513,59 @@ test('file not under GOROOT/src is not stdlib', () => {
   assert.strictEqual(filePath.startsWith(gorootSrc), false);
 });
 
+// ==================== Stdlib Import Sources (v0.1.12) ====================
+console.log('\n=== Stdlib Import Sources ===');
+
+test('parseJsonStream captures TestImports field', () => {
+  const r = parseJsonStream('{"ImportPath":"myapp","Imports":["fmt"],"TestImports":["testing","os"],"Deps":["fmt","testing","os"]}');
+  assert.ok(r[0].TestImports);
+  assert.deepStrictEqual(r[0].TestImports, ['testing', 'os']);
+});
+
+test('parseJsonStream captures XTestImports field', () => {
+  const r = parseJsonStream('{"ImportPath":"myapp","XTestImports":["net/http/httptest"]}');
+  assert.ok(r[0].XTestImports);
+  assert.deepStrictEqual(r[0].XTestImports, ['net/http/httptest']);
+});
+
+test('parseJsonStream captures Deps field with transitive deps', () => {
+  const r = parseJsonStream('{"ImportPath":"myapp","Deps":["fmt","internal/fmtsort","io","os","reflect","sort","sync","unicode/utf8"]}');
+  assert.ok(r[0].Deps);
+  assert.strictEqual(r[0].Deps.length, 8);
+  assert.ok(r[0].Deps.includes('internal/fmtsort'));
+});
+
+test('all stdlib import sources detected correctly', () => {
+  // Simulate what parseStdlibDeps does: collect from all fields
+  const pkg = {
+    Imports: ['fmt', 'github.com/gin-gonic/gin'],
+    TestImports: ['testing', 'os'],
+    XTestImports: ['net/http/httptest'],
+    Deps: ['fmt', 'testing', 'os', 'net/http/httptest', 'sync', 'io']
+  };
+  const allImports = [
+    ...(pkg.Imports || []),
+    ...(pkg.TestImports || []),
+    ...(pkg.XTestImports || []),
+    ...(pkg.Deps || []),
+  ];
+  const stdlibSet = new Set<string>();
+  for (const imp of allImports) {
+    if (isStandardLibraryPackage(imp)) {
+      stdlibSet.add(imp);
+    }
+  }
+  // Should have: fmt, testing, os, net/http/httptest, sync, io (NOT gin)
+  assert.ok(stdlibSet.has('fmt'));
+  assert.ok(stdlibSet.has('testing'));
+  assert.ok(stdlibSet.has('os'));
+  assert.ok(stdlibSet.has('net/http/httptest'));
+  assert.ok(stdlibSet.has('sync'));
+  assert.ok(stdlibSet.has('io'));
+  assert.ok(!stdlibSet.has('github.com/gin-gonic/gin'));
+  assert.strictEqual(stdlibSet.size, 6);
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);
