@@ -162,12 +162,21 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
 
   /** Find and return the cached nodes for a given absolute file path */
   findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode } | undefined {
-    // 首先在 nodeMap 中查找已存在的文件节点
-    for (const [id, node] of this.nodeMap) {
-      if (id.startsWith('file:') && node instanceof FileNode && node.fsPath === filePath) {
-        // 找到对应的依赖节点
-        const depId = `dep:${node.dep.path}@${node.dep.version}`;
+    // 首先在 nodeMap 中查找已存在的文件节点（优先匹配 preferred project）
+    if (preferredProjectRoot) {
+      const preferredFileId = `file:${preferredProjectRoot}:${filePath}`;
+      const cachedFile = this.nodeMap.get(preferredFileId) as FileNode | undefined;
+      if (cachedFile) {
+        const depId = `dep:${preferredProjectRoot}:${cachedFile.dep.path}@${cachedFile.dep.version}`;
         const depNode = this.nodeMap.get(depId) as DependencyNode | undefined;
+        return { depNode, fileNode: cachedFile };
+      }
+    }
+
+    // 如果 preferred 没命中，遍历查找任意项目的缓存
+    for (const [id, node] of this.nodeMap) {
+      if (node instanceof FileNode && node.fsPath === filePath) {
+        const depNode = this.findParentDep(node);
         return { depNode, fileNode: node };
       }
     }
@@ -197,6 +206,15 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       return this.buildNodeChain(candidates[0].root, candidates[0].dep, candidates[0].sourcePath, filePath);
     }
     
+    return undefined;
+  }
+
+  private findParentDep(node: TreeNode): DependencyNode | undefined {
+    let current: any = node;
+    while (current) {
+      if (current instanceof DependencyNode) { return current; }
+      current = current.parent;
+    }
     return undefined;
   }
 

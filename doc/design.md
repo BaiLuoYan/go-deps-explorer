@@ -152,13 +152,17 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   refresh(): void;
   
   // 定位到指定文件路径（供 EditorTracker 调用）
-  findNodeForFile(filePath: string): { depNode?: DependencyNode; fileNode?: FileNode };
+  // preferredProjectRoot: 优先匹配的项目根目录，确保多项目工作空间下的精确定位
+  findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode };
   
   // 构建完整节点链（含目录和文件）
   private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode };
   
   // 获取或创建节点，确保单例
   private getOrCreateNode<T extends TreeNode>(factory: () => T): T;
+  
+  // 新增 helper 方法：从文件节点向上查找所属的依赖包节点
+  private findParentDep(node: TreeNode): DependencyNode | undefined;
 }
 ```
 
@@ -226,6 +230,8 @@ interface DependencyNode extends BaseNode {
   type: NodeType.Dependency;
   dep: DependencyInfo;
   sourcePath: string;       // 实际源码路径
+  // 节点 ID 设计：包含 projectRoot 前缀以区分不同项目
+  // 格式：dep:${projectRoot}:${path}@${version}
 }
 
 // 目录节点
@@ -233,6 +239,8 @@ interface DirectoryNode extends BaseNode {
   type: NodeType.Directory;
   fsPath: string;
   dep: DependencyInfo;      // 所属依赖（用于定位）
+  // 节点 ID 设计：包含 projectRoot 前缀以区分不同项目
+  // ID 通过 resolveProjectRoot() 遍历 parent 链找到项目根目录
 }
 
 // 文件节点
@@ -240,9 +248,26 @@ interface FileNode extends BaseNode {
   type: NodeType.File;
   fsPath: string;
   dep: DependencyInfo;      // 所属依赖（用于定位）
+  // 节点 ID 设计：包含 projectRoot 前缀以区分不同项目
+  // ID 通过 resolveProjectRoot() 遍历 parent 链找到项目根目录
 }
 
 type TreeNode = ProjectNode | CategoryNode | DependencyNode | DirectoryNode | FileNode;
+
+// 工具函数：从节点链中找到项目根目录
+function resolveProjectRoot(node: TreeNode): string {
+  let current: TreeNode | undefined = node;
+  while (current) {
+    if (current.type === NodeType.Project) {
+      return current.projectRoot;
+    }
+    if (current.type === NodeType.Category) {
+      return current.projectRoot;
+    }
+    current = current.parent;
+  }
+  throw new Error('Cannot resolve project root from node chain');
+}
 ```
 
 ### 2.5 ReadonlyFileViewer (`readonlyFileViewer.ts`)

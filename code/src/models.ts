@@ -55,7 +55,7 @@ export class DependencyNode {
     public readonly sourcePath: string,
     public readonly parent: CategoryNode,
   ) {
-    this.id = `dep:${dep.path}@${dep.version}`;
+    this.id = `dep:${parent.projectRoot}:${dep.path}@${dep.version}`;
   }
 
   get label(): string {
@@ -71,8 +71,19 @@ export class DirectoryNode {
     public readonly fsPath: string,
     public readonly dep: DependencyInfo,
     public readonly parent: TreeNode,
+    projectRoot?: string,
   ) {
-    this.id = `dir:${fsPath}`;
+    const root = projectRoot || this.resolveProjectRoot();
+    this.id = `dir:${root}:${fsPath}`;
+  }
+
+  private resolveProjectRoot(): string {
+    let node: any = this.parent;
+    while (node) {
+      if (node.projectRoot) { return node.projectRoot; }
+      node = node.parent;
+    }
+    return '';
   }
 }
 
@@ -84,8 +95,19 @@ export class FileNode {
     public readonly fsPath: string,
     public readonly dep: DependencyInfo,
     public readonly parent: TreeNode,
+    projectRoot?: string,
   ) {
-    this.id = `file:${fsPath}`;
+    const root = projectRoot || this.resolveProjectRoot();
+    this.id = `file:${root}:${fsPath}`;
+  }
+
+  private resolveProjectRoot(): string {
+    let node: any = this.parent;
+    while (node) {
+      if (node.projectRoot) { return node.projectRoot; }
+      node = node.parent;
+    }
+    return '';
   }
 }
 

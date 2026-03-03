@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.9] - 2026-03-03
+
+### Fixed
+- Workspace mode: node IDs now include projectRoot to distinguish the same dependency across different projects
+- DependencyNode ID changed from `dep:{path}@{version}` to `dep:{projectRoot}:{path}@{version}`
+- DirectoryNode and FileNode IDs also include projectRoot to avoid cross-project cache collisions
+- `findNodeForFile` prioritizes preferred project when looking up cached nodes
+
 ## [0.1.8] - 2026-03-03
 
 ### Fixed
