@@ -27,7 +27,11 @@ export class EditorTracker {
       return; 
     }
 
-    const result = this.treeProvider.findNodeForFile(filePath);
+    // Get the current project root from the active editor's document
+    const currentProjectRoot = this.getCurrentProjectRoot(editor.document.uri);
+    this.outputChannel.appendLine(`Current project root: ${currentProjectRoot || 'none'}`);
+
+    const result = this.treeProvider.findNodeForFile(filePath, currentProjectRoot);
     if (!result?.depNode) { 
       this.outputChannel.appendLine('No dependency node found for file');
       return; 
@@ -46,6 +50,17 @@ export class EditorTracker {
     } catch (e) {
       this.outputChannel.appendLine(`Reveal failed: ${e}`);
     }
+  }
+
+  private getCurrentProjectRoot(documentUri: vscode.Uri): string | undefined {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders) {
+      return undefined;
+    }
+
+    // Find the workspace folder that contains this document
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
+    return workspaceFolder?.uri.fsPath;
   }
 
   private isDependencyFile(filePath: string): boolean {

@@ -161,7 +161,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   }
 
   /** Find and return the cached nodes for a given absolute file path */
-  findNodeForFile(filePath: string): { depNode?: DependencyNode; fileNode?: FileNode } | undefined {
+  findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode } | undefined {
     // 首先在 nodeMap 中查找已存在的文件节点
     for (const [id, node] of this.nodeMap) {
       if (id.startsWith('file:') && node instanceof FileNode && node.fsPath === filePath) {
@@ -173,38 +173,60 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     }
 
     // 如果文件节点未缓存，主动构建完整的节点链
+    const candidates: { root: string; dep: DependencyInfo; sourcePath: string }[] = [];
+    
     for (const [root, deps] of this.projects) {
       for (const dep of deps) {
         const sourcePath = this.parser.getSourcePath(dep, root);
         if (filePath.startsWith(sourcePath + path.sep) || filePath === sourcePath) {
-          // 主动创建完整的节点链：project -> category -> dependency
-          const projectId = `project:${root}`;
-          let projectNode = this.nodeMap.get(projectId) as ProjectNode | undefined;
-          if (!projectNode) {
-            projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps)) as ProjectNode;
-          }
-
-          const categoryId = `category:${root}:${dep.indirect ? 'indirect' : 'direct'}`;
-          let categoryNode = this.nodeMap.get(categoryId) as CategoryNode | undefined;
-          if (!categoryNode) {
-            categoryNode = this.getOrCreateNode(() => new CategoryNode(
-              dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies',
-              dep.indirect ? 'indirect' : 'direct',
-              root,
-              deps,
-              this.isWorkspace ? projectNode : undefined
-            )) as CategoryNode;
-          }
-
-          // 创建依赖节点
-          const depNode = this.getOrCreateNode(() => new DependencyNode(dep, sourcePath, categoryNode)) as DependencyNode;
-
-          // 返回依赖节点，文件节点暂时为空（因为树可能未展开到文件层级）
-          return { depNode };
+          candidates.push({ root, dep, sourcePath });
         }
       }
     }
+
+    // 如果有多个匹配项且指定了首选项目根目录，优先返回匹配的项目
+    if (candidates.length > 1 && preferredProjectRoot) {
+      const preferred = candidates.find(c => c.root === preferredProjectRoot);
+      if (preferred) {
+        return this.buildNodeChain(preferred.root, preferred.dep, preferred.sourcePath);
+      }
+    }
+
+    // 返回第一个匹配的候选项
+    if (candidates.length > 0) {
+      return this.buildNodeChain(candidates[0].root, candidates[0].dep, candidates[0].sourcePath);
+    }
+    
     return undefined;
+  }
+
+  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string): { depNode: DependencyNode; fileNode?: FileNode } {
+    const deps = this.projects.get(root) || [];
+    
+    // 主动创建完整的节点链：project -> category -> dependency
+    const projectId = `project:${root}`;
+    let projectNode = this.nodeMap.get(projectId) as ProjectNode | undefined;
+    if (!projectNode) {
+      projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps)) as ProjectNode;
+    }
+
+    const categoryId = `category:${root}:${dep.indirect ? 'indirect' : 'direct'}`;
+    let categoryNode = this.nodeMap.get(categoryId) as CategoryNode | undefined;
+    if (!categoryNode) {
+      categoryNode = this.getOrCreateNode(() => new CategoryNode(
+        dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies',
+        dep.indirect ? 'indirect' : 'direct',
+        root,
+        deps,
+        this.isWorkspace ? projectNode : undefined
+      )) as CategoryNode;
+    }
+
+    // 创建依赖节点
+    const depNode = this.getOrCreateNode(() => new DependencyNode(dep, sourcePath, categoryNode)) as DependencyNode;
+
+    // 返回依赖节点，文件节点暂时为空（因为树可能未展开到文件层级）
+    return { depNode };
   }
 
   /** 获取或创建节点，确保每个 id 只有一个实例 */
@@ -270,18 +292,18 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const lines = [
       `**${dep.path}**`,
       ``,
-      `版本: \`${dep.version}\``,
-      `类型: ${dep.indirect ? '间接依赖' : '直接依赖'}`,
-      `路径: \`${node.sourcePath}\``,
+      `Version: \`${dep.version}\`  `,
+      `Type: ${dep.indirect ? 'Indirect' : 'Direct'}  `,
+      `Path: \`${node.sourcePath}\`  `,
     ];
     if (dep.replace) {
       lines.push(``);
-      lines.push(`**Replace:**`);
-      lines.push(`→ ${dep.replace.path}${dep.replace.version ? '@' + dep.replace.version : ''}`);
-      if (dep.replace.dir) { lines.push(`路径: \`${dep.replace.dir}\``); }
+      lines.push(`**Replace:**  `);
+      lines.push(`→ ${dep.replace.path}${dep.replace.version ? '@' + dep.replace.version : ''}  `);
+      if (dep.replace.dir) { lines.push(`Path: \`${dep.replace.dir}\`  `); }
     }
     if (dep.goVersion) {
-      lines.push(`Go 版本: \`${dep.goVersion}\``);
+      lines.push(`Go Version: \`${dep.goVersion}\`  `);
     }
     // URL guess
     if (dep.path.startsWith('github.com/') || dep.path.startsWith('gitlab.com/')) {
