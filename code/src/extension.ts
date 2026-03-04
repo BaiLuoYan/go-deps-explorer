@@ -22,6 +22,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const treeProvider = new DependencyTreeProvider(parser, config);
 
   // Initialize dependencies
+  treeProvider.setWorkspaceState(context.workspaceState);
   await treeProvider.initialize(projectRoots);
 
   // Create TreeView

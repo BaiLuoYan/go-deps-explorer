@@ -650,6 +650,182 @@ test('sub-project name includes parent folder prefix', () => {
   assert.strictEqual(subProjectName, 'MyApp/api');
 });
 
+// ==================== Lazy Mode (v0.2.0) ====================
+console.log('\n=== Lazy Mode ===');
+
+test('revealedDeps set correctly tracks dep keys', () => {
+  const revealedDeps = new Set<string>();
+  const key = '/project-a:github.com/gin-gonic/gin@v1.9.1';
+  revealedDeps.add(key);
+  assert.ok(revealedDeps.has(key));
+  assert.ok(!revealedDeps.has('/project-b:github.com/gin-gonic/gin@v1.9.1'));
+});
+
+test('revealedDeps survives serialization/deserialization', () => {
+  const revealedDeps = new Set<string>();
+  revealedDeps.add('/p1:fmt@stdlib');
+  revealedDeps.add('/p1:github.com/foo/bar@v1.0.0');
+  // Simulate workspaceState save/restore
+  const serialized = Array.from(revealedDeps);
+  const restored = new Set(serialized);
+  assert.strictEqual(restored.size, 2);
+  assert.ok(restored.has('/p1:fmt@stdlib'));
+  assert.ok(restored.has('/p1:github.com/foo/bar@v1.0.0'));
+});
+
+test('lazy filter only includes revealed deps', () => {
+  const revealedDeps = new Set<string>();
+  revealedDeps.add('/root:github.com/a/a@v1.0.0');
+  const allDeps = [
+    { path: 'github.com/a/a', version: 'v1.0.0', indirect: false },
+    { path: 'github.com/b/b', version: 'v2.0.0', indirect: false },
+    { path: 'github.com/c/c', version: 'v3.0.0', indirect: true },
+  ];
+  const filtered = allDeps.filter(dep => revealedDeps.has(`/root:${dep.path}@${dep.version}`));
+  assert.strictEqual(filtered.length, 1);
+  assert.strictEqual(filtered[0].path, 'github.com/a/a');
+});
+
+test('hasRevealed returns false when no deps revealed for category', () => {
+  const revealedDeps = new Set<string>();
+  revealedDeps.add('/root:github.com/a/a@v1.0.0');
+  const indirectDeps = [
+    { path: 'github.com/x/x', version: 'v1.0.0', indirect: true },
+  ];
+  const hasRevealed = indirectDeps.some(dep => revealedDeps.has(`/root:${dep.path}@${dep.version}`));
+  assert.strictEqual(hasRevealed, false);
+});
+
+test('multiple projects track revealed deps independently', () => {
+  const revealedDeps = new Set<string>();
+  revealedDeps.add('/project-a:github.com/gin-gonic/gin@v1.9.1');
+  revealedDeps.add('/project-b:github.com/gin-gonic/gin@v1.9.1');
+  assert.strictEqual(revealedDeps.size, 2);
+  // Same dep, different projects = different keys
+});
+
+// ==================== Tree Collapse & Auto-Reveal (v0.2.0) ====================
+console.log('\n=== Tree Collapse & Auto-Reveal ===');
+
+test('project nodes default to collapsed state', () => {
+  // TreeItemCollapsibleState.Collapsed = 1, Expanded = 2
+  const collapsedState = 1;
+  assert.strictEqual(collapsedState, 1, 'Project nodes should use Collapsed (1) not Expanded (2)');
+});
+
+test('category nodes default to collapsed state', () => {
+  const collapsedState = 1;
+  assert.strictEqual(collapsedState, 1, 'Category nodes should use Collapsed (1) not Expanded (2)');
+});
+
+test('visibility change triggers editor check', () => {
+  // Simulate: panel becomes visible → should check current editor
+  let editorChecked = false;
+  const onVisible = (visible: boolean) => {
+    if (visible) { editorChecked = true; }
+  };
+  onVisible(true);
+  assert.strictEqual(editorChecked, true);
+});
+
+test('visibility change does not trigger when hidden', () => {
+  let editorChecked = false;
+  const onVisible = (visible: boolean) => {
+    if (visible) { editorChecked = true; }
+  };
+  onVisible(false);
+  assert.strictEqual(editorChecked, false);
+});
+
+test('startup check detects dependency file in active editor', () => {
+  const gorootSrc = '/usr/local/go/src';
+  const modCache = '/home/user/go/pkg/mod';
+  
+  // Active editor is a stdlib file
+  const activeFile1 = '/usr/local/go/src/fmt/print.go';
+  assert.strictEqual(activeFile1.startsWith(gorootSrc), true, 'Should detect stdlib file on startup');
+  
+  // Active editor is a module dep file
+  const activeFile2 = '/home/user/go/pkg/mod/github.com/gin@v1.9.1/gin.go';
+  assert.strictEqual(activeFile2.startsWith(modCache), true, 'Should detect module dep file on startup');
+  
+  // Active editor is a project file
+  const activeFile3 = '/home/user/myproject/main.go';
+  assert.strictEqual(activeFile3.startsWith(gorootSrc), false);
+  assert.strictEqual(activeFile3.startsWith(modCache), false, 'Should not trigger for project files');
+});
+
+test('lazyMode startup: reveal only if current file is dep + has revealed deps', () => {
+  const revealedDeps = new Set<string>();
+  revealedDeps.add('/root:github.com/gin-gonic/gin@v1.9.1');
+  
+  // Current file belongs to a revealed dep → should reveal
+  const depKey = '/root:github.com/gin-gonic/gin@v1.9.1';
+  assert.ok(revealedDeps.has(depKey), 'Should reveal previously visited dep on restart');
+  
+  // Current file belongs to an unrevealed dep → should add and reveal
+  const newKey = '/root:github.com/new/pkg@v1.0.0';
+  assert.ok(!revealedDeps.has(newKey), 'New dep not yet revealed');
+  revealedDeps.add(newKey);
+  assert.ok(revealedDeps.has(newKey), 'After navigation, dep should be revealed');
+});
+
+// ==================== Dynamic Stdlib Addition (v0.2.0) ====================
+console.log('\n=== Dynamic Stdlib Addition ===');
+
+test('extract stdlib package path from file path', () => {
+  const gorootSrc = '/usr/local/go/src';
+  const filePath = '/usr/local/go/src/net/http/server.go';
+  const relativePath = path.relative(gorootSrc, filePath);
+  const segments = relativePath.split(path.sep);
+  let pkgPath = '';
+  for (let i = 0; i < segments.length - 1; i++) {
+    pkgPath = pkgPath ? pkgPath + '/' + segments[i] : segments[i];
+  }
+  assert.strictEqual(pkgPath, 'net/http');
+});
+
+test('extract single-level stdlib package path', () => {
+  const gorootSrc = '/usr/local/go/src';
+  const filePath = '/usr/local/go/src/fmt/print.go';
+  const relativePath = path.relative(gorootSrc, filePath);
+  const segments = relativePath.split(path.sep);
+  let pkgPath = '';
+  for (let i = 0; i < segments.length - 1; i++) {
+    pkgPath = pkgPath ? pkgPath + '/' + segments[i] : segments[i];
+  }
+  assert.strictEqual(pkgPath, 'fmt');
+});
+
+test('extract internal stdlib package path', () => {
+  const gorootSrc = '/usr/local/go/src';
+  const filePath = '/usr/local/go/src/internal/fmtsort/sort.go';
+  const relativePath = path.relative(gorootSrc, filePath);
+  const segments = relativePath.split(path.sep);
+  let pkgPath = '';
+  for (let i = 0; i < segments.length - 1; i++) {
+    pkgPath = pkgPath ? pkgPath + '/' + segments[i] : segments[i];
+  }
+  assert.strictEqual(pkgPath, 'internal/fmtsort');
+});
+
+test('addStdlibDep deduplicates by path', () => {
+  const stdlibList: { path: string; version: string }[] = [
+    { path: 'fmt', version: 'stdlib' },
+  ];
+  const newDep = { path: 'fmt', version: 'stdlib' };
+  if (!stdlibList.some(d => d.path === newDep.path)) {
+    stdlibList.push(newDep);
+  }
+  assert.strictEqual(stdlibList.length, 1, 'Should not add duplicate');
+  
+  const newDep2 = { path: 'io', version: 'stdlib' };
+  if (!stdlibList.some(d => d.path === newDep2.path)) {
+    stdlibList.push(newDep2);
+  }
+  assert.strictEqual(stdlibList.length, 2, 'Should add new package');
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);

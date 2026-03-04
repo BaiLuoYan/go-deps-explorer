@@ -20,10 +20,64 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   // 统一的节点管理器 - 确保每个节点只有一个实例
   private nodeMap = new Map<string, TreeNode>();
 
+  // Lazy mode: track which deps have been revealed
+  private revealedDeps = new Set<string>();
+  private workspaceState: vscode.Memento | undefined;
+
   constructor(
     private parser: GoModParser,
     private config: ConfigManager,
   ) {}
+
+  setWorkspaceState(state: vscode.Memento): void {
+    this.workspaceState = state;
+    // Restore previously revealed deps
+    const saved = state.get<string[]>('revealedDeps', []);
+    this.revealedDeps = new Set(saved);
+  }
+
+  private saveRevealedDeps(): void {
+    this.workspaceState?.update('revealedDeps', Array.from(this.revealedDeps));
+  }
+
+  /** Called by EditorTracker to add a dep to the lazy tree and refresh */
+  revealDep(root: string, dep: DependencyInfo): void {
+    if (!this.config.lazyMode) { return; }
+    const key = `${root}:${dep.path}@${dep.version}`;
+    if (this.revealedDeps.has(key)) { return; }
+    this.revealedDeps.add(key);
+    this.saveRevealedDeps();
+    this._onDidChangeTreeData.fire();
+  }
+
+  /** Dynamically add a stdlib package that wasn't in the initial go list output */
+  addStdlibDep(root: string, dep: DependencyInfo): void {
+    let stdlibList = this.stdlibDeps.get(root);
+    if (!stdlibList) {
+      stdlibList = [];
+      this.stdlibDeps.set(root, stdlibList);
+    }
+    // Check if already exists
+    if (!stdlibList.some(d => d.path === dep.path)) {
+      stdlibList.push(dep);
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
+  /** Get GOROOT src path from parser or cached stdlib deps */
+  getGorootSrc(): string | undefined {
+    // Try to infer from existing stdlib deps
+    for (const [, deps] of this.stdlibDeps) {
+      for (const dep of deps) {
+        if (dep.dir && dep.version === 'stdlib') {
+          // dep.dir is like /usr/local/go/src/fmt → strip the package name
+          const idx = dep.dir.indexOf('/src/');
+          if (idx >= 0) { return dep.dir.substring(0, idx + 4); } // include /src
+        }
+      }
+    }
+    return undefined;
+  }
 
   private projectNames: Map<string, string> = new Map();
 
@@ -66,7 +120,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   getTreeItem(element: TreeNode): vscode.TreeItem {
     switch (element.type) {
       case NodeType.Project: {
-        const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
+        const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
         item.iconPath = new vscode.ThemeIcon('root-folder');
         item.contextValue = 'project';
         return item;
@@ -92,7 +146,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         
         const item = new vscode.TreeItem(
           `${label} (${count})`,
-          vscode.TreeItemCollapsibleState.Expanded,
+          vscode.TreeItemCollapsibleState.Collapsed,
         );
         item.iconPath = new vscode.ThemeIcon(iconName);
         item.contextValue = `category-${element.category}`;
@@ -151,7 +205,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     if (!element) {
       // Root level
       if (this.isWorkspace) {
-        return this.projectOrder
+        const nodes = this.projectOrder
           .filter(root => this.projects.has(root))
           .map(root => {
             const deps = this.projects.get(root)!;
@@ -159,6 +213,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
             const projectNode = this.getOrCreateNode(() => new ProjectNode(name, root, deps));
             return projectNode as ProjectNode;
           });
+        // In lazy mode, hide projects with no revealed deps
+        if (this.config.lazyMode) {
+          return nodes.filter(node => {
+            const allDeps = [...(this.projects.get(node.projectRoot) || []), ...(this.stdlibDeps.get(node.projectRoot) || [])];
+            return allDeps.some(dep => this.revealedDeps.has(`${node.projectRoot}:${dep.path}@${dep.version}`));
+          });
+        }
+        return nodes;
       } else {
         // Single project: show categories directly
         const entry = Array.from(this.projects.entries())[0];
@@ -183,6 +245,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
         filtered = element.dependencies.filter(d =>
           element.category === 'direct' ? !d.indirect : d.indirect
         );
+      }
+
+      // Lazy mode: only show revealed deps
+      if (this.config.lazyMode) {
+        filtered = filtered.filter(dep => {
+          const key = `${element.projectRoot}:${dep.path}@${dep.version}`;
+          return this.revealedDeps.has(key);
+        });
       }
       
       return filtered
@@ -292,14 +362,20 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       projectNode = this.getOrCreateNode(() => new ProjectNode(this.projectNames.get(root) || path.basename(root), root, deps)) as ProjectNode;
     }
 
-    const categoryId = `category:${root}:${dep.indirect ? 'indirect' : 'direct'}`;
+    // Determine category type: stdlib, indirect, or direct
+    const isStdlib = dep.version === 'stdlib';
+    const categoryType = isStdlib ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+    const categoryLabel = isStdlib ? 'Standard Library' : (dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies');
+    const categoryDeps = isStdlib ? (this.stdlibDeps.get(root) || []) : deps;
+
+    const categoryId = `category:${root}:${categoryType}`;
     let categoryNode = this.nodeMap.get(categoryId) as CategoryNode | undefined;
     if (!categoryNode) {
       categoryNode = this.getOrCreateNode(() => new CategoryNode(
-        dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies',
-        dep.indirect ? 'indirect' : 'direct',
+        categoryLabel,
+        categoryType,
         root,
-        deps,
+        categoryDeps,
         this.isWorkspace ? projectNode : undefined
       )) as CategoryNode;
     }
@@ -352,15 +428,20 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const directDeps = deps.filter(d => !d.indirect);
     const indirectDeps = deps.filter(d => d.indirect);
 
-    if (directDeps.length > 0) {
+    const hasRevealed = (depList: DependencyInfo[]) => {
+      if (!this.config.lazyMode) { return depList.length > 0; }
+      return depList.some(dep => this.revealedDeps.has(`${projectRoot}:${dep.path}@${dep.version}`));
+    };
+
+    if (hasRevealed(directDeps)) {
       const categoryNode = this.getOrCreateNode(() => new CategoryNode('Direct Dependencies', 'direct', projectRoot, deps, parent));
       categories.push(categoryNode);
     }
-    if (this.config.showIndirect && indirectDeps.length > 0) {
+    if (this.config.showIndirect && hasRevealed(indirectDeps)) {
       const categoryNode = this.getOrCreateNode(() => new CategoryNode('Indirect Dependencies', 'indirect', projectRoot, deps, parent));
       categories.push(categoryNode);
     }
-    if (stdlibDeps.length > 0) {
+    if (hasRevealed(stdlibDeps)) {
       const categoryNode = this.getOrCreateNode(() => new CategoryNode('Standard Library', 'stdlib', projectRoot, stdlibDeps, parent));
       categories.push(categoryNode);
     }

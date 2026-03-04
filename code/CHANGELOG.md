@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0] - 2026-03-04
+
+### Added
+- **Lazy Mode** (`goDepsExplorer.lazyMode`): when enabled, dependency tree starts empty; dependencies appear only when navigating to their source via Cmd+Click
+  - Previously visited dependencies are preserved across navigations
+  - Persisted via `workspaceState` — restored automatically on restart
+  - Empty categories and projects are hidden until a dependency is revealed
+
+### Changed
+- All tree nodes (projects, categories) now default to **collapsed** state instead of expanded
+- On startup, if the current active editor is a dependency file, the tree automatically expands to that file
+- When the Explorer panel becomes visible (from hidden), if the current editor is a dependency file, the tree automatically expands to it
+
+### Fixed
+- Navigating between stdlib source files now correctly reveals the target file in the dependency tree
+- Stdlib packages not in the initial `go list` output (e.g. `internal/` packages) are dynamically added when first navigated to
+- `buildNodeChain` now correctly places stdlib deps under "Standard Library" category (was wrongly placed under "Direct Dependencies")
+
 ## [0.1.21] - 2026-03-04
 
 ### Fixed

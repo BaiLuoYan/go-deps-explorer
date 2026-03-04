@@ -7,21 +7,43 @@ import { getGopath } from './utils';
 import { extractModuleFromPath } from './pure';
 
 export class EditorTracker {
-  private disposable: vscode.Disposable;
+  private disposables: vscode.Disposable[] = [];
   private outputChannel: vscode.OutputChannel;
   private lastProjectRoot: string | undefined;
   private gorootSrc: string | undefined;
+  private pendingReveal = false;
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
   ) {
     this.outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
-    this.disposable = vscode.window.onDidChangeActiveTextEditor(editor => {
+    
+    // Listen for editor changes
+    this.disposables.push(vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor) { this.onEditorChanged(editor); }
-    });
+    }));
+
+    // Listen for tree view visibility changes
+    this.disposables.push(treeView.onDidChangeVisibility(e => {
+      if (e.visible) {
+        this.outputChannel.appendLine('Tree view became visible, checking current editor');
+        const editor = vscode.window.activeTextEditor;
+        if (editor) { this.onEditorChanged(editor); }
+      }
+    }));
+
     // Cache GOROOT on init
     this.initGoroot();
+
+    // Check current active editor on startup (after a short delay for tree to initialize)
+    setTimeout(() => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        this.outputChannel.appendLine('Checking active editor on startup');
+        this.onEditorChanged(editor);
+      }
+    }, 1000);
   }
 
   private initGoroot(): void {
@@ -67,11 +89,42 @@ export class EditorTracker {
 
     this.outputChannel.appendLine(`Using project root: ${this.lastProjectRoot || 'none'}`);
 
-    const result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+    let result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+    
+    // If not found and file is under GOROOT/src, dynamically add the stdlib package
+    if (!result?.depNode && this.gorootSrc && filePath.startsWith(this.gorootSrc + path.sep)) {
+      const relativePath = path.relative(this.gorootSrc, filePath);
+      const segments = relativePath.split(path.sep);
+      // Find the package path — could be multi-level like "net/http" or single like "fmt"
+      // Walk up from file to find a directory that contains .go files at the expected package level
+      let pkgPath = '';
+      for (let i = 0; i < segments.length - 1; i++) {
+        pkgPath = pkgPath ? pkgPath + '/' + segments[i] : segments[i];
+      }
+      if (pkgPath) {
+        const pkgDir = path.join(this.gorootSrc, pkgPath);
+        const dep: any = { path: pkgPath, version: 'stdlib', indirect: false, dir: pkgDir };
+        // Add to all projects (or preferred project)
+        const targetRoot = this.lastProjectRoot || Array.from(this.treeProvider['projects'].keys())[0];
+        if (targetRoot) {
+          this.treeProvider.addStdlibDep(targetRoot, dep);
+          this.outputChannel.appendLine(`Dynamically added stdlib dep: ${pkgPath} for ${targetRoot}`);
+          // Re-search after adding
+          result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+        }
+      }
+    }
+    
     if (!result?.depNode) { 
       this.outputChannel.appendLine('No dependency node found for file');
       return; 
     }
+
+    // In lazy mode, ensure this dep is added to the revealed set
+    this.treeProvider.revealDep(
+      result.depNode.parent.projectRoot,
+      result.depNode.dep,
+    );
 
     this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
 
@@ -128,7 +181,7 @@ export class EditorTracker {
   }
 
   dispose(): void {
-    this.disposable.dispose();
+    this.disposables.forEach(d => d.dispose());
     this.outputChannel.dispose();
   }
 }

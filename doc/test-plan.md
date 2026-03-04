@@ -116,6 +116,16 @@
 
 | **TC-NEW-19** | **依赖源码内跳转支持验证（v0.1.20 新增）** | **在依赖包源码文件中 Cmd+Click 跳转到其他依赖包或标准库** | **依赖源码文件使用原生 file:// URI 打开，gopls 能正常索引，支持跳转到其他依赖包，同时依赖树能正确定位到跳转目标所在的依赖包节点** |
 
+| **TC-NEW-20** | **lazyMode=false 时行为不变（v0.2.0 新增）** | **设置 goDepsExplorer.lazyMode=false，打开包含 Go 项目的工作空间** | **依赖树显示所有直接依赖、间接依赖和标准库包，行为与之前版本完全一致** |
+
+| **TC-NEW-21** | **lazyMode=true 初始依赖树为空（v0.2.0 新增）** | **设置 goDepsExplorer.lazyMode=true，打开包含 Go 项目的工作空间** | **依赖树初始为空，不显示任何依赖包、分类节点或项目节点** |
+
+| **TC-NEW-22** | **Cmd+Click 跳转后对应依赖出现在树中（v0.2.0 新增）** | **lazyMode=true，Cmd+Click 跳转到某个依赖包源码文件** | **该依赖包自动出现在依赖树的对应分类中，并展开到跳转的目标文件** |
+
+| **TC-NEW-23** | **多次跳转后之前的依赖保留（v0.2.0 新增）** | **lazyMode=true，先跳转到依赖包A，再跳转到依赖包B** | **依赖树中同时显示依赖包A和依赖包B，之前跳转过的依赖包不会消失** |
+
+| **TC-NEW-24** | **重启后已展示的依赖自动恢复（v0.2.0 新增）** | **lazyMode=true，跳转到多个依赖包后重启 VSCode/插件** | **重启后依赖树自动恢复显示之前跳转过的所有依赖包，不需要重新跳转** |
+
 ### 2.7 新增功能测试用例 (v0.1.11)
 
 | 测试编号 | 测试用例描述 | 输入数据 | 预期结果 |
@@ -138,6 +148,21 @@
 | **BF-003** | **findNodeForFile 标准库搜索** | **标准库文件路径和多个项目的依赖树** | **遍历所有项目的 stdlibDeps，找到匹配的标准库依赖节点** |
 | **BF-004** | **标准库文件跳转定位完整流程** | **用户 Cmd+Click 跳转到 fmt.Println 源码** | **EditorTracker → findNodeForFile → buildNodeChain → treeView.reveal 完整流程正常工作** |
 | **BF-005** | **GOROOT 获取失败的错误处理** | **go env GOROOT 命令执行失败** | **gorootSrc 保持 undefined，不影响其他路径检查，输出错误日志到 Output Channel** |
+
+### 2.9 新增功能测试用例 (v0.2.0 懒加载模式)
+
+| 测试编号 | 测试用例描述 | 输入数据 | 预期结果 |
+|---------|-------------|----------|----------|
+| **LM-001** | **ConfigManager lazyMode 配置读取** | **goDepsExplorer.lazyMode 设置为 true/false** | **configManager.lazyMode 返回正确的 boolean 值** |
+| **LM-002** | **revealedDeps 数据结构初始化** | **DependencyTreeProvider 初始化** | **revealedDeps 为空 Set，workspaceState 为 undefined** |
+| **LM-003** | **createDepKey 格式验证** | **projectRoot="/project", dep.path="github.com/gin-gonic/gin", dep.version="v1.9.1"** | **返回 "/project:github.com/gin-gonic/gin@v1.9.1"** |
+| **LM-004** | **revealDep 添加和持久化** | **调用 revealDep(root, dep)** | **depKey 添加到 revealedDeps，触发 persistRevealedDeps()，发送 tree refresh 事件** |
+| **LM-005** | **workspaceState 恢复机制** | **workspaceState 包含之前保存的 revealedDeps 数据** | **setWorkspaceState() 调用后，revealedDeps 恢复到之前状态** |
+| **LM-006** | **lazy mode 下 getChildren 过滤** | **CategoryNode，包含 5 个依赖，只有 2 个在 revealedDeps 中** | **getChildren() 只返回 2 个 DependencyNode** |
+| **LM-007** | **非 lazy mode 下 getChildren 不过滤** | **lazyMode=false，CategoryNode 包含所有依赖** | **getChildren() 返回所有依赖的 DependencyNode** |
+| **LM-008** | **buildCategories 分类过滤** | **lazy mode 下，直接依赖有已展示包，间接依赖没有** | **只返回 "直接依赖" CategoryNode，隐藏 "间接依赖"** |
+| **LM-009** | **workspace mode 项目过滤** | **多项目工作空间，只有项目A有已展示依赖，项目B没有** | **根节点只返回项目A的 ProjectNode** |
+| **LM-010** | **EditorTracker 触发 revealDep** | **Cmd+Click 跳转到依赖包源码文件** | **EditorTracker.onEditorChanged() 调用 treeProvider.revealDep()** |
 
 ### 2.8 新增功能测试用例 (v0.1.20)
 
@@ -193,6 +218,14 @@
 | F6.1 | handleReplace 设置项 | CM-001 | 单元测试 |
 | F6.2 | Replace 路径覆盖逻辑 | GP-004 | 单元测试 |
 | F6.3 | 本地路径 tooltip | - | 集成测试 |
+| F8 | 懒加载模式（v0.2.0 新增） | LM-001~LM-010, TC-NEW-20~TC-NEW-24 | 单元测试 + 集成测试 |
+| F8.1 | 初始状态为空 | TC-NEW-21, LM-002 | 集成测试 |
+| F8.2 | 跳转时自动显示 | TC-NEW-22, LM-004, LM-010 | 集成测试 |
+| F8.3 | 累积保留依赖 | TC-NEW-23, LM-006 | 集成测试 |
+| F8.4 | 持久化存储 | TC-NEW-24, LM-005 | 集成测试 |
+| F8.5 | 兼容性保证 | TC-NEW-20, LM-007 | 集成测试 |
+| F8.6 | 分类过滤 | LM-008 | 单元测试 |
+| F8.7 | 项目过滤 | LM-009 | 单元测试 |
 
 ---
 

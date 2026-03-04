@@ -112,6 +112,19 @@ project2/
 | F7.2 | gopls 语言服务器能正常索引和解析依赖包源码文件 | P0 |
 | F7.3 | 在依赖包源码中跳转到其他依赖时，能自动在依赖树中定位目标依赖包 | P0 |
 
+### 2.10 懒加载模式 [P1 - 重要]
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F8 | 新增配置 `goDepsExplorer.lazyMode`（boolean, 默认 false）控制懒加载模式 | P1 |
+| F8.1 | **初始状态**：开启 lazyMode 时，初始依赖树为空，不显示任何依赖包 | P1 |
+| F8.2 | **自动显示**：当 Cmd+Click 跳转到依赖源码时，该依赖包自动出现在依赖树中并展开到对应文件 | P1 |
+| F8.3 | **累积保留**：之前已展示过的依赖包保留显示，不会在后续操作中消失 | P1 |
+| F8.4 | **持久化存储**：插件/VSCode 重启时，之前打开过的依赖包自动恢复显示 | P1 |
+| F8.5 | **兼容性**：lazyMode=false 时，行为与之前版本完全一致，显示所有依赖包 | P1 |
+| F8.6 | **分类过滤**：lazy mode 下隐藏没有已展示依赖的 category（直接依赖/间接依赖/标准库） | P1 |
+| F8.7 | **项目过滤**：workspace mode 下隐藏没有已展示依赖的 project | P1 |
+
 ## 3. 非功能需求
 
 | ID | 描述 |
@@ -137,6 +150,7 @@ project2/
 | `goDepsExplorer.handleReplace` | boolean | true | 是否处理 go.mod 中的 replace 指令 |
 | `goDepsExplorer.showIndirect` | boolean | true | 是否显示间接依赖 |
 | `goDepsExplorer.vendorFirst` | boolean | false | 优先使用 vendor 目录 |
+| `goDepsExplorer.lazyMode` | boolean | false | 是否启用懒加载模式（初始依赖树为空，Cmd+Click 跳转时才显示依赖） |
 
 ## 7. 版本发布需求
 

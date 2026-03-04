@@ -13,6 +13,10 @@ export class ConfigManager {
     return vscode.workspace.getConfiguration('goDepsExplorer').get('vendorFirst', false);
   }
 
+  get lazyMode(): boolean {
+    return vscode.workspace.getConfiguration('goDepsExplorer').get('lazyMode', false);
+  }
+
   onConfigChange(callback: () => void): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('goDepsExplorer')) {

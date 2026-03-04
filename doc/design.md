@@ -485,6 +485,11 @@ class ConfigManager {
     return vscode.workspace.getConfiguration('goDepsExplorer').get('vendorFirst', false);
   }
   
+  // v0.2.0 新增：懒加载模式配置
+  get lazyMode(): boolean {
+    return vscode.workspace.getConfiguration('goDepsExplorer').get('lazyMode', false);
+  }
+  
   // 监听配置变化
   onConfigChange(callback: () => void): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration(e => {
@@ -493,6 +498,229 @@ class ConfigManager {
       }
     });
   }
+}
+```
+
+## 2.9 Lazy Mode 设计 (`dependencyTreeProvider.ts`)
+
+**v0.2.0 新增**: 懒加载模式支持，初始依赖树为空，仅在用户跳转到依赖源码时才显示对应依赖包。
+
+### 2.9.1 核心数据结构
+
+```typescript
+class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
+  // v0.2.0 新增：懒加载状态管理
+  private revealedDeps = new Set<string>();       // 已展示的依赖包集合
+  private workspaceState?: vscode.Memento;        // VSCode 工作空间状态存储
+  
+  // 设置工作空间状态（用于持久化）
+  setWorkspaceState(memento: vscode.Memento): void {
+    this.workspaceState = memento;
+    this.restoreRevealedDeps();
+  }
+  
+  // 从 workspaceState 恢复已展示的依赖
+  private restoreRevealedDeps(): void {
+    const savedDeps = this.workspaceState?.get<string[]>('revealedDeps', []);
+    if (savedDeps) {
+      this.revealedDeps = new Set(savedDeps);
+    }
+  }
+  
+  // 添加依赖到已展示集合并持久化
+  revealDep(root: string, dep: DependencyInfo): void {
+    const depKey = this.createDepKey(root, dep);
+    this.revealedDeps.add(depKey);
+    this.persistRevealedDeps();
+    this._onDidChangeTreeData.fire(undefined);
+  }
+  
+  // 创建依赖的唯一标识 key
+  private createDepKey(root: string, dep: DependencyInfo): string {
+    return `${root}:${dep.path}@${dep.version}`;
+  }
+  
+  // 持久化已展示的依赖到 workspaceState
+  private persistRevealedDeps(): void {
+    if (this.workspaceState) {
+      this.workspaceState.update('revealedDeps', Array.from(this.revealedDeps));
+    }
+  }
+}
+```
+
+### 2.9.2 getChildren 过滤逻辑
+
+```typescript
+getChildren(element?: TreeNode): Promise<TreeNode[]> {
+  if (element?.type === NodeType.Category) {
+    const category = element as CategoryNode;
+    const config = this.configManager;
+    
+    // lazy mode 下过滤只显示 revealedDeps 中的依赖
+    if (config.lazyMode) {
+      return category.dependencies.filter(dep => {
+        const depKey = this.createDepKey(category.projectRoot, dep);
+        return this.revealedDeps.has(depKey);
+      }).map(dep => this.createDependencyNode(dep, category));
+    }
+    
+    // 非 lazy mode：显示所有依赖
+    return category.dependencies.map(dep => this.createDependencyNode(dep, category));
+  }
+  
+  // ... 其他节点类型处理逻辑 ...
+}
+```
+
+### 2.9.3 buildCategories 分类过滤
+
+```typescript
+private buildCategories(projectRoot: string, deps: DependencyInfo[], stdlibDeps: DependencyInfo[]): CategoryNode[] {
+  const config = this.configManager;
+  const categories: CategoryNode[] = [];
+  
+  const directDeps = deps.filter(dep => !dep.indirect);
+  const indirectDeps = deps.filter(dep => dep.indirect);
+  
+  // lazy mode 下：隐藏没有已展示依赖的 category
+  if (config.lazyMode) {
+    const hasRevealedDirect = directDeps.some(dep => 
+      this.revealedDeps.has(this.createDepKey(projectRoot, dep))
+    );
+    const hasRevealedIndirect = indirectDeps.some(dep => 
+      this.revealedDeps.has(this.createDepKey(projectRoot, dep))
+    );
+    const hasRevealedStdlib = stdlibDeps.some(dep => 
+      this.revealedDeps.has(this.createDepKey(projectRoot, dep))
+    );
+    
+    if (hasRevealedDirect) {
+      categories.push(this.createCategoryNode('direct', projectRoot, directDeps));
+    }
+    if (hasRevealedIndirect) {
+      categories.push(this.createCategoryNode('indirect', projectRoot, indirectDeps));
+    }
+    if (hasRevealedStdlib) {
+      categories.push(this.createCategoryNode('stdlib', projectRoot, stdlibDeps));
+    }
+  } else {
+    // 非 lazy mode：显示所有分类（原有逻辑）
+    categories.push(this.createCategoryNode('direct', projectRoot, directDeps));
+    if (config.showIndirect) {
+      categories.push(this.createCategoryNode('indirect', projectRoot, indirectDeps));
+    }
+    categories.push(this.createCategoryNode('stdlib', projectRoot, stdlibDeps));
+  }
+  
+  return categories;
+}
+```
+
+### 2.9.4 Workspace Mode 项目过滤
+
+```typescript
+getChildren(element?: TreeNode): Promise<TreeNode[]> {
+  if (element === undefined) {  // 根节点
+    if (this.isWorkspaceMode && this.projects.length > 1) {
+      // workspace mode 下：lazy mode 时隐藏没有已展示依赖的 project
+      if (this.configManager.lazyMode) {
+        return this.projects.filter(project => {
+          return this.hasRevealedDepsInProject(project.root);
+        }).map(project => this.createProjectNode(project));
+      }
+      // 非 lazy mode：显示所有项目
+      return this.projects.map(project => this.createProjectNode(project));
+    }
+    
+    // 单项目模式：返回分类节点
+    const project = this.projects[0];
+    return this.buildCategories(project.root, project.dependencies, project.stdlibDeps);
+  }
+  
+  // ... 其他逻辑 ...
+}
+
+// 检查项目是否有已展示的依赖
+private hasRevealedDepsInProject(projectRoot: string): boolean {
+  const project = this.projects.find(p => p.root === projectRoot);
+  if (!project) return false;
+  
+  const allDeps = [...project.dependencies, ...project.stdlibDeps];
+  return allDeps.some(dep => {
+    const depKey = this.createDepKey(projectRoot, dep);
+    return this.revealedDeps.has(depKey);
+  });
+}
+```
+
+### 2.9.5 EditorTracker 触发流程
+
+```typescript
+// editorTracker.ts
+class EditorTracker {
+  private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
+    const filePath = editor.document.uri.fsPath;
+    
+    // 跟踪 lastProjectRoot
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    if (workspaceFolder) {
+      this.lastProjectRoot = workspaceFolder.uri.fsPath;
+    }
+
+    // 判断文件是否在某个依赖包路径下
+    if (this.isDependencyFile(filePath)) {
+      // 查找对应的依赖包和文件节点
+      const result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+      
+      if (result?.depNode) {
+        // v0.2.0 新增：触发依赖包显示
+        this.treeProvider.revealDep(
+          this.resolveProjectRoot(result.depNode), 
+          result.depNode.dep
+        );
+        
+        // 定位到文件节点
+        if (result?.fileNode) {
+          await this.treeView.reveal(result.fileNode, { select: true, focus: false, expand: false });
+        }
+      }
+    }
+  }
+  
+  // 从节点中解析项目根目录
+  private resolveProjectRoot(node: DependencyNode): string {
+    // 从节点的 parent 链中找到项目根目录
+    let current: TreeNode | undefined = node;
+    while (current) {
+      if (current.type === NodeType.Project) {
+        return (current as ProjectNode).projectRoot;
+      }
+      if (current.type === NodeType.Category) {
+        return (current as CategoryNode).projectRoot;
+      }
+      current = current.parent;
+    }
+    throw new Error('Cannot resolve project root from dependency node');
+  }
+}
+```
+
+### 2.9.6 Extension 初始化
+
+```typescript
+// extension.ts
+export async function activate(context: vscode.ExtensionContext) {
+  // ... 其他初始化逻辑 ...
+  
+  // 创建 DependencyTreeProvider
+  const treeProvider = new DependencyTreeProvider(configManager, goModParser);
+  treeProvider.initialize(projects);
+  
+  // v0.2.0 新增：设置 workspaceState 用于持久化
+  treeProvider.setWorkspaceState(context.workspaceState);
+  
+  // ... 其他注册逻辑 ...
 }
 ```
 
@@ -636,6 +864,11 @@ code/
           "type": "boolean",
           "default": false,
           "description": "优先使用 vendor 目录"
+        },
+        "goDepsExplorer.lazyMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "启用懒加载模式（初始依赖树为空，Cmd+Click 跳转时才显示依赖）"
         }
       }
     }
