@@ -87,6 +87,13 @@ export class EditorTracker {
       return; 
     }
 
+    // Mark dependency files as read-only (covers Cmd+Click jumps via gopls)
+    try {
+      await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
+    } catch {
+      // VS Code < 1.79: silently ignore
+    }
+
     this.outputChannel.appendLine(`Using project root: ${this.lastProjectRoot || 'none'}`);
 
     let result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);

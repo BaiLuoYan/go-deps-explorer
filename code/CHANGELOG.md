@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.5] - 2026-03-04
+
+### Fixed
+- Dependency source files opened via **Cmd+Click** (gopls jump) are now also marked read-only. Previously only files opened from the tree view were read-only. `EditorTracker.onEditorChanged()` now sets session-level readonly for all dependency files regardless of how they were opened.
+
 ## [0.2.4] - 2026-03-04
 
 ### Fixed
