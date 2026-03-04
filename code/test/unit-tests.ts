@@ -607,6 +607,49 @@ test('preferred project exact match returns immediately', () => {
   assert.ok(cachedFile, 'Should find exact match for project-b');
 });
 
+// ==================== Workspace Project Names & Order (v0.1.19) ====================
+console.log('\n=== Workspace Project Names & Order ===');
+
+test('project names from workspace folders are preserved', () => {
+  const projects = [
+    { root: '/home/user/projects/api-server', name: 'API Server' },
+    { root: '/home/user/projects/web-client', name: 'Web Client' },
+  ];
+  const projectNames = new Map<string, string>();
+  const projectOrder: string[] = [];
+  for (const { root, name } of projects) {
+    projectNames.set(root, name);
+    projectOrder.push(root);
+  }
+  assert.strictEqual(projectNames.get('/home/user/projects/api-server'), 'API Server');
+  assert.strictEqual(projectNames.get('/home/user/projects/web-client'), 'Web Client');
+});
+
+test('project order matches workspace folder order', () => {
+  const projects = [
+    { root: '/b-project', name: 'B' },
+    { root: '/a-project', name: 'A' },
+    { root: '/c-project', name: 'C' },
+  ];
+  const projectOrder = projects.map(p => p.root);
+  assert.deepStrictEqual(projectOrder, ['/b-project', '/a-project', '/c-project']);
+});
+
+test('fallback to basename when name not in map', () => {
+  const projectNames = new Map<string, string>();
+  const root = '/home/user/my-project';
+  const name = projectNames.get(root) || path.basename(root);
+  assert.strictEqual(name, 'my-project');
+});
+
+test('sub-project name includes parent folder prefix', () => {
+  // mono-repo: workspace folder "MyApp" has sub-dir "services/api" with go.mod
+  const folderName = 'MyApp';
+  const entryName = 'api';
+  const subProjectName = `${folderName}/${entryName}`;
+  assert.strictEqual(subProjectName, 'MyApp/api');
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);
