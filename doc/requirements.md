@@ -150,6 +150,15 @@ project2/
 | F13.2 | 调用 addStdlibDep 动态添加到 stdlibDeps 集合 | P1 |
 | F13.3 | 重新搜索 findNodeForFile，确保动态添加的标准库包能被找到 | P1 |
 
+### 2.14 会话级只读模式 [P0 - 必须]
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F14 | 打开依赖源码文件后，调用 `workbench.action.files.setActiveEditorReadonlyInSession` 命令标记为会话级只读 | P0 |
+| F14.1 | 使用 try/catch 包裹命令调用，确保旧版 VS Code (< 1.79) 兼容性 | P0 |
+| F14.2 | 恢复从 `go-dep:` scheme 迁移到 `file://` URI 时丢失的只读功能 | P0 |
+| F14.3 | 会话级只读：文件在当前 VS Code 会话中只读，重新打开后可正常编辑 | P0 |
+
 ## 3. 非功能需求
 
 | ID | 描述 |
