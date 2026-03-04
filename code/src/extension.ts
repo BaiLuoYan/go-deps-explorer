@@ -70,15 +70,15 @@ export function deactivate(): void {
   console.log('Go Deps Explorer deactivated');
 }
 
-function findGoProjects(): string[] {
-  const roots: string[] = [];
+function findGoProjects(): { root: string; name: string }[] {
+  const projects: { root: string; name: string }[] = [];
   const folders = vscode.workspace.workspaceFolders;
-  if (!folders) { return roots; }
+  if (!folders) { return projects; }
 
   for (const folder of folders) {
     const goModPath = path.join(folder.uri.fsPath, 'go.mod');
     if (fs.existsSync(goModPath)) {
-      roots.push(folder.uri.fsPath);
+      projects.push({ root: folder.uri.fsPath, name: folder.name });
     }
     // Also check immediate subdirectories for mono-repo setups
     try {
@@ -87,7 +87,7 @@ function findGoProjects(): string[] {
         if (entry.isDirectory() && !entry.name.startsWith('.')) {
           const subGoMod = path.join(folder.uri.fsPath, entry.name, 'go.mod');
           if (fs.existsSync(subGoMod)) {
-            roots.push(path.join(folder.uri.fsPath, entry.name));
+            projects.push({ root: path.join(folder.uri.fsPath, entry.name), name: `${folder.name}/${entry.name}` });
           }
         }
       }
@@ -96,5 +96,11 @@ function findGoProjects(): string[] {
     }
   }
 
-  return [...new Set(roots)]; // deduplicate
+  // Deduplicate by root path, preserving order
+  const seen = new Set<string>();
+  return projects.filter(p => {
+    if (seen.has(p.root)) { return false; }
+    seen.add(p.root);
+    return true;
+  });
 }

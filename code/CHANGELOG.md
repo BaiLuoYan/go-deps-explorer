@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.19] - 2026-03-04
+
+### Changed
+- Workspace mode: project nodes now display the name from .code-workspace file (folder name) instead of directory basename
+- Project order in dependency tree matches the workspace folder order
+
 ## [0.1.17] - 2026-03-03
 
 ### Changed

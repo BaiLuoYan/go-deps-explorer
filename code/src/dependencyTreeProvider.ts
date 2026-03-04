@@ -15,6 +15,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   private projects: Map<string, DependencyInfo[]> = new Map();
   private stdlibDeps: Map<string, DependencyInfo[]> = new Map();
   private isWorkspace = false;
+  private projectOrder: string[] = [];
 
   // 统一的节点管理器 - 确保每个节点只有一个实例
   private nodeMap = new Map<string, TreeNode>();
@@ -24,9 +25,13 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     private config: ConfigManager,
   ) {}
 
-  async initialize(projectRoots: string[]): Promise<void> {
-    this.isWorkspace = projectRoots.length > 1;
-    for (const root of projectRoots) {
+  private projectNames: Map<string, string> = new Map();
+
+  async initialize(projects: { root: string; name: string }[]): Promise<void> {
+    this.isWorkspace = projects.length > 1;
+    this.projectOrder = projects.map(p => p.root);
+    for (const { root, name } of projects) {
+      this.projectNames.set(root, name);
       try {
         const deps = await this.parser.parseDependencies(root);
         this.projects.set(root, deps);
@@ -46,11 +51,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     // 清空节点映射表
     this.nodeMap.clear();
     
-    // Re-scan all projects
-    const roots = Array.from(this.projects.keys());
+    // Re-scan all projects, preserving names and order
+    const projects = this.projectOrder.map(root => ({
+      root,
+      name: this.projectNames.get(root) || path.basename(root),
+    }));
     this.projects.clear();
     this.stdlibDeps.clear();
-    this.initialize(roots).then(() => {
+    this.initialize(projects).then(() => {
       this._onDidChangeTreeData.fire();
     });
   }
@@ -143,10 +151,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     if (!element) {
       // Root level
       if (this.isWorkspace) {
-        return Array.from(this.projects.entries()).map(([root, deps]) => {
-          const projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps));
-          return projectNode as ProjectNode;
-        });
+        return this.projectOrder
+          .filter(root => this.projects.has(root))
+          .map(root => {
+            const deps = this.projects.get(root)!;
+            const name = this.projectNames.get(root) || path.basename(root);
+            const projectNode = this.getOrCreateNode(() => new ProjectNode(name, root, deps));
+            return projectNode as ProjectNode;
+          });
       } else {
         // Single project: show categories directly
         const entry = Array.from(this.projects.entries())[0];
@@ -277,7 +289,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const projectId = `project:${root}`;
     let projectNode = this.nodeMap.get(projectId) as ProjectNode | undefined;
     if (!projectNode) {
-      projectNode = this.getOrCreateNode(() => new ProjectNode(path.basename(root), root, deps)) as ProjectNode;
+      projectNode = this.getOrCreateNode(() => new ProjectNode(this.projectNames.get(root) || path.basename(root), root, deps)) as ProjectNode;
     }
 
     const categoryId = `category:${root}:${dep.indirect ? 'indirect' : 'direct'}`;
