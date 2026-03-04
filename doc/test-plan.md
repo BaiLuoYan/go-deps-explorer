@@ -124,7 +124,15 @@
 
 | **TC-NEW-23** | **多次跳转后之前的依赖保留（v0.2.0 新增）** | **lazyMode=true，先跳转到依赖包A，再跳转到依赖包B** | **依赖树中同时显示依赖包A和依赖包B，之前跳转过的依赖包不会消失** |
 
-| **TC-NEW-24** | **重启后已展示的依赖自动恢复（v0.2.0 新增）** | **lazyMode=true，跳转到多个依赖包后重启 VSCode/插件** | **重启后依赖树自动恢复显示之前跳转过的所有依赖包，不需要重新跳转** |
+| **TC-NEW-25** | **默认折叠状态验证（v0.2.0 新增）** | **打开包含 Go 项目的工作空间，查看依赖树初始状态** | **所有 Project 节点和 Category 节点默认为 Collapsed 状态，无论 lazyMode 是否开启** |
+
+| **TC-NEW-26** | **启动时自动 reveal（v0.2.0 新增）** | **VSCode 启动时当前 active editor 为依赖包源码文件** | **启动 1 秒后自动检查当前 editor，如果是依赖文件则自动 reveal 并定位到依赖树中对应的文件节点** |
+
+| **TC-NEW-27** | **面板可见时自动 reveal（v0.2.0 新增）** | **Explorer 面板从隐藏状态变为可见，当前 editor 为依赖包源码文件** | **面板变为可见时（onDidChangeVisibility）自动检查当前 editor 并 reveal 定位** |
+
+| **TC-NEW-28** | **动态 stdlib 添加（v0.2.0 新增）** | **Cmd+Click 跳转到 $GOROOT/src/internal/fmtsort/sort.go（不在初始 go list 输出中）** | **从文件路径提取包名 "internal/fmtsort"，调用 addStdlibDep 动态添加到 stdlibDeps，重新搜索 findNodeForFile 成功定位** |
+
+| **TC-NEW-29** | **buildNodeChain stdlib category 正确性（v0.2.0 修复）** | **跳转到标准库文件，检查 buildNodeChain 构建的节点链** | **dep.version === 'stdlib' 的依赖放在 "Standard Library" category 下，不会错误放在 "Direct Dependencies"** |
 
 ### 2.7 新增功能测试用例 (v0.1.11)
 
@@ -162,7 +170,19 @@
 | **LM-007** | **非 lazy mode 下 getChildren 不过滤** | **lazyMode=false，CategoryNode 包含所有依赖** | **getChildren() 返回所有依赖的 DependencyNode** |
 | **LM-008** | **buildCategories 分类过滤** | **lazy mode 下，直接依赖有已展示包，间接依赖没有** | **只返回 "直接依赖" CategoryNode，隐藏 "间接依赖"** |
 | **LM-009** | **workspace mode 项目过滤** | **多项目工作空间，只有项目A有已展示依赖，项目B没有** | **根节点只返回项目A的 ProjectNode** |
-| **LM-010** | **EditorTracker 触发 revealDep** | **Cmd+Click 跳转到依赖包源码文件** | **EditorTracker.onEditorChanged() 调用 treeProvider.revealDep()** |
+| **LM-011** | **默认折叠状态配置（v0.2.0 新增）** | **创建 ProjectNode 和 CategoryNode** | **getTreeItem() 返回 TreeItemCollapsibleState.Collapsed，无论 lazyMode 设置** |
+
+| **LM-012** | **启动时自动 reveal 机制（v0.2.0 新增）** | **EditorTracker 构造时，setTimeout 1s 后检查 active editor** | **如果当前 editor 是依赖文件，自动触发 reveal 和定位** |
+
+| **LM-013** | **onDidChangeVisibility 监听（v0.2.0 新增）** | **Explorer 面板从隐藏变为可见，当前 editor 为依赖文件** | **触发 checkCurrentEditorAndReveal()，自动 reveal 定位** |
+
+| **LM-014** | **动态 stdlib 包提取（v0.2.0 新增）** | **文件路径 "/usr/local/go/src/internal/fmtsort/sort.go"** | **extractPackageFromPath() 返回 "internal/fmtsort"** |
+
+| **LM-015** | **addStdlibDep 动态添加（v0.2.0 新增）** | **调用 addStdlibDep(projectRoot, "internal/fmtsort")** | **将新的 stdlib dep 添加到对应项目的 stdlibDeps 数组，避免重复添加** |
+
+| **LM-016** | **buildNodeChain stdlib 判断（v0.2.0 修复）** | **dep.version = 'stdlib'** | **categoryType 计算结果为 'stdlib'，节点放在 "Standard Library" 分类下** |
+
+| **LM-017** | **EditorTracker disposables 管理（v0.2.0 新增）** | **创建 EditorTracker 实例** | **所有事件监听器添加到 disposables 数组，dispose() 时正确清理** |
 
 ### 2.8 新增功能测试用例 (v0.1.20)
 

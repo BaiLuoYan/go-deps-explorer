@@ -501,7 +501,7 @@ class ConfigManager {
 }
 ```
 
-## 2.9 Lazy Mode 设计 (`dependencyTreeProvider.ts`)
+### 2.9 Lazy Mode 设计 (`dependencyTreeProvider.ts`)
 
 **v0.2.0 新增**: 懒加载模式支持，初始依赖树为空，仅在用户跳转到依赖源码时才显示对应依赖包。
 
@@ -659,6 +659,46 @@ private hasRevealedDepsInProject(projectRoot: string): boolean {
 ```typescript
 // editorTracker.ts
 class EditorTracker {
+  private disposables: vscode.Disposable[] = [];           // v0.2.0 新增：管理所有订阅
+
+  constructor(
+    private treeView: vscode.TreeView<TreeNode>,
+    private treeProvider: DependencyTreeProvider
+  ) {
+    this.outputChannel = vscode.window.createOutputChannel('Go Dependencies Explorer');
+    // 初始化 GOROOT 缓存
+    this.initGoroot();
+    
+    // 监听 active editor 变化
+    this.disposables.push(
+      vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (editor) this.onEditorChanged(editor);
+      })
+    );
+    
+    // v0.2.0 新增：监听 TreeView 可见性变化
+    this.disposables.push(
+      this.treeView.onDidChangeVisibility(e => {
+        if (e.visible) {
+          this.checkCurrentEditorAndReveal();
+        }
+      })
+    );
+    
+    // v0.2.0 新增：启动时延迟检查当前 editor
+    setTimeout(() => {
+      this.checkCurrentEditorAndReveal();
+    }, 1000);
+  }
+  
+  // v0.2.0 新增：检查当前 editor 并 reveal（用于启动和面板可见时）
+  private async checkCurrentEditorAndReveal(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      await this.onEditorChanged(activeEditor);
+    }
+  }
+  
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
     const filePath = editor.document.uri.fsPath;
     
@@ -703,6 +743,11 @@ class EditorTracker {
     }
     throw new Error('Cannot resolve project root from dependency node');
   }
+  
+  // v0.2.0 新增：清理资源
+  dispose(): void {
+    this.disposables.forEach(d => d.dispose());
+  }
 }
 ```
 
@@ -721,6 +766,130 @@ export async function activate(context: vscode.ExtensionContext) {
   treeProvider.setWorkspaceState(context.workspaceState);
   
   // ... 其他注册逻辑 ...
+}
+```
+
+### 2.10 动态 Stdlib 添加设计
+
+**v0.2.0 新增**: 当用户跳转到 $GOROOT/src/ 下的标准库包，但该包不在初始 `go list -json ./...` 输出中时（如 internal/ 包），动态添加到标准库依赖列表。
+
+```typescript
+class DependencyTreeProvider {
+  // 动态添加标准库依赖包
+  addStdlibDep(projectRoot: string, pkgPath: string): void {
+    const project = this.projects.find(p => p.root === projectRoot);
+    if (!project) return;
+    
+    // 检查是否已存在
+    const exists = project.stdlibDeps.some(dep => dep.path === pkgPath);
+    if (exists) return;
+    
+    // 创建新的标准库依赖
+    const stdlibDep: DependencyInfo = {
+      path: pkgPath,
+      version: 'stdlib',
+      indirect: false,
+      dir: path.join(this.goModParser.getGoRoot(), 'src', pkgPath)
+    };
+    
+    project.stdlibDeps.push(stdlibDep);
+    this.outputChannel.appendLine(`Dynamically added stdlib package: ${pkgPath}`);
+  }
+  
+  // 增强 findNodeForFile：支持动态添加标准库包
+  findNodeForFile(filePath: string, preferredProjectRoot?: string): { depNode?: DependencyNode; fileNode?: FileNode } {
+    // ... 原有搜索逻辑 ...
+    
+    // v0.2.0 新增：动态标准库添加
+    const gorootSrc = this.goModParser.getGoRoot() + '/src/';
+    if (filePath.startsWith(gorootSrc)) {
+      const relativePath = filePath.slice(gorootSrc.length);
+      const pkgPath = this.extractPackageFromPath(relativePath);
+      
+      if (pkgPath && preferredProjectRoot) {
+        // 动态添加到对应项目
+        this.addStdlibDep(preferredProjectRoot, pkgPath);
+        
+        // 重新搜索
+        return this.findNodeForFile(filePath, preferredProjectRoot);
+      }
+    }
+    
+    return {};
+  }
+  
+  // 从文件路径提取包名（支持多级）
+  private extractPackageFromPath(relativePath: string): string | null {
+    // 示例: "net/http/server.go" → "net/http"
+    // 示例: "internal/fmtsort/sort.go" → "internal/fmtsort"
+    const parts = relativePath.split('/');
+    if (parts.length < 1) return null;
+    
+    // 去掉文件名，保留目录路径
+    if (parts[parts.length - 1].includes('.')) {
+      parts.pop();
+    }
+    
+    return parts.join('/');
+  }
+}
+```
+
+### 2.11 默认折叠状态设计
+
+**v0.2.0 变更**: 所有树节点默认为折叠状态，而不是展开状态。
+
+```typescript
+class DependencyTreeProvider {
+  // v0.2.0 变更：getTreeItem 默认折叠状态
+  getTreeItem(element: TreeNode): vscode.TreeItem {
+    if (element.type === NodeType.Project) {
+      const item = new vscode.TreeItem(
+        element.displayName,
+        vscode.TreeItemCollapsibleState.Collapsed  // v0.2.0: 默认折叠
+      );
+      // ... 其他属性设置 ...
+      return item;
+    }
+    
+    if (element.type === NodeType.Category) {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed  // v0.2.0: 默认折叠
+      );
+      // ... 其他属性设置 ...
+      return item;
+    }
+    
+    // ... 其他节点类型 ...
+  }
+}
+```
+
+### 2.12 buildNodeChain Stdlib 修复
+
+**v0.2.0 修复**: `buildNodeChain` 现在正确检查 `dep.version === 'stdlib'`，确保标准库依赖放在 "Standard Library" 分类下。
+
+```typescript
+class DependencyTreeProvider {
+  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode } {
+    // v0.2.0 修复：正确判断标准库依赖的分类
+    const categoryType = dep.version === 'stdlib' ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+    
+    // 获取或创建分类节点
+    const categoryNode = this.getOrCreateCategoryNode(categoryType, root);
+    
+    // 创建依赖节点
+    const depNode = this.getOrCreateDependencyNode(dep, categoryNode, sourcePath);
+    
+    // 如果指定了文件路径，构建文件节点链
+    if (filePath) {
+      const fileNode = this.buildFileNodeChain(depNode, sourcePath, filePath);
+      return { depNode, fileNode };
+    }
+    
+    return { depNode };
+  }
 }
 ```
 

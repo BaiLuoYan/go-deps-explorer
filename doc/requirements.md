@@ -125,6 +125,31 @@ project2/
 | F8.6 | **分类过滤**：lazy mode 下隐藏没有已展示依赖的 category（直接依赖/间接依赖/标准库） | P1 |
 | F8.7 | **项目过滤**：workspace mode 下隐藏没有已展示依赖的 project | P1 |
 
+### 2.11 默认折叠行为 [P0 - 必须]
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F9 | 所有 Project 节点和 Category 节点默认折叠状态（Collapsed） | P0 |
+| F9.1 | 无论 lazyMode 是否开启，所有树节点的初始状态均为 Collapsed（不再是 Expanded） | P0 |
+
+### 2.12 自动 Reveal [P0 - 必须]
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F10 | 启动时检查当前 active editor，如果是依赖文件则自动 reveal 并定位 | P0 |
+| F10.1 | 启动延迟检查（setTimeout 1s）确保依赖树已完全初始化 | P0 |
+| F10.2 | Explorer 面板从隐藏状态变为可见时（onDidChangeVisibility），检查当前 editor 并 reveal | P0 |
+| F10.3 | 无论 lazyMode 是否开启，自动 reveal 功能均有效 | P0 |
+
+### 2.13 动态 Stdlib 添加 [P1 - 重要]
+
+| ID | 功能描述 | 优先级 |
+|----|---------|--------|
+| F11 | 当文件在 $GOROOT/src/ 下但 findNodeForFile 找不到匹配 dep 时，动态添加标准库包 | P1 |
+| F11.1 | 从文件路径提取包名，支持多级路径（如 net/http、internal/fmtsort） | P1 |
+| F11.2 | 调用 addStdlibDep 动态添加到 stdlibDeps 集合 | P1 |
+| F11.3 | 重新搜索 findNodeForFile，确保动态添加的标准库包能被找到 | P1 |
+
 ## 3. 非功能需求
 
 | ID | 描述 |
