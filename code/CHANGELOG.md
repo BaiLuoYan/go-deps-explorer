@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.4] - 2026-03-04
+
+### Fixed
+- Dependency source files opened via `file://` URI are now marked as **read-only** in the current session (`workbench.action.files.setActiveEditorReadonlyInSession`), restoring the read-only behavior lost in v0.1.20's scheme migration
+
 ## [0.2.3] - 2026-03-04
 
 ### Fixed

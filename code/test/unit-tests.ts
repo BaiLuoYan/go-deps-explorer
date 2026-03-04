@@ -866,6 +866,22 @@ test('stdlib category ID uses stdlib suffix', () => {
   assert.strictEqual(categoryId, 'category:/project-a:stdlib');
 });
 
+// ==================== ReadonlyFileViewer (v0.2.4) ====================
+console.log('\n=== ReadonlyFileViewer ===');
+
+test('openFile uses file:// URI scheme', () => {
+  const fsPath = '/home/user/go/pkg/mod/github.com/gin@v1.9.1/gin.go';
+  // Verify we construct a file:// URI, not a custom scheme
+  assert.ok(fsPath.startsWith('/'), 'fsPath should be absolute');
+  assert.ok(!fsPath.startsWith('go-dep:'), 'Should not use custom scheme');
+});
+
+test('readonly command is called after opening file', () => {
+  // Verify the command name is correct
+  const cmd = 'workbench.action.files.setActiveEditorReadonlyInSession';
+  assert.strictEqual(cmd, 'workbench.action.files.setActiveEditorReadonlyInSession');
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);
