@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.21] - 2026-03-04
+
+### Fixed
+- Tree reveal no longer forces the Explorer panel open when it is hidden; reveal only triggers when the tree view is already visible
+
 ## [0.1.20] - 2026-03-04
 
 ### Changed

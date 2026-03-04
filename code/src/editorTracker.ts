@@ -75,6 +75,12 @@ export class EditorTracker {
 
     this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
 
+    // Only reveal if the tree view is currently visible (don't force open the Explorer panel)
+    if (!this.treeView.visible) {
+      this.outputChannel.appendLine('Tree view not visible, skipping reveal');
+      return;
+    }
+
     try {
       if (result.fileNode) {
         // Reveal 到具体文件节点，VSCode 只展开该路径
