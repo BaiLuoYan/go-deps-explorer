@@ -306,26 +306,27 @@ function resolveProjectRoot(node: TreeNode): string {
 
 **职责**: 以只读方式打开依赖包文件
 
-**实现方案**: 使用 `vscode.Uri` 的自定义 scheme
+**v0.1.20 变更**: 从自定义 `go-dep:` scheme 改为原生 `file://` URI
 
 ```typescript
 class ReadonlyFileViewer {
-  // 注册自定义 TextDocumentContentProvider
-  register(context: vscode.ExtensionContext): void;
+  // v0.1.20 简化：不再需要注册自定义 ContentProvider
   
-  // 打开文件（只读）
+  // 打开文件（只读，使用原生 file:// URI）
   async openFile(fsPath: string): Promise<void>;
 }
 ```
 
-**只读实现**:
+**实现方案变更**:
+
+**v0.1.20 之前（自定义 scheme）**:
 ```typescript
-// 方案：使用自定义 URI scheme + TextDocumentContentProvider
+// 旧方案：使用自定义 URI scheme + TextDocumentContentProvider
 const SCHEME = 'go-dep';
 
 class DepFileContentProvider implements vscode.TextDocumentContentProvider {
   provideTextDocumentContent(uri: vscode.Uri): string {
-    const fsPath = decodeURIComponent(uri.query);  // 使用 decodeURIComponent 解码路径
+    const fsPath = decodeURIComponent(uri.query);
     return fs.readFileSync(fsPath, 'utf8');
   }
 }
@@ -337,6 +338,27 @@ async openFile(fsPath: string) {
   await vscode.window.showTextDocument(doc, { preview: true });
 }
 ```
+
+**v0.1.20 新方案（原生 file:// URI）**:
+```typescript
+// 新方案：直接使用 vscode.Uri.file() 打开
+class ReadonlyFileViewer {
+  async openFile(fsPath: string): Promise<void> {
+    const uri = vscode.Uri.file(fsPath);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { 
+      preview: true,
+      preserveFocus: false 
+    });
+  }
+}
+```
+
+**变更优势**:
+- **gopls 兼容性**: 原生 `file://` URI 能被 gopls 语言服务器正常索引
+- **跳转支持**: 在依赖源码中能够 Cmd+Click 跳转到其他依赖/标准库
+- **代码简化**: 移除自定义 TextDocumentContentProvider 和 go-dep: scheme
+- **性能提升**: 直接使用 VSCode 原生文件系统，减少中间层
 
 ### 2.6 EditorTracker (`editorTracker.ts`)
 
@@ -886,3 +908,88 @@ function extractModuleFromPath(filePath: string): { modulePath: string; version:
 - DirectoryNode 同理，逐层懒加载
 - 文件/目录排序：目录在前、文件在后、各自按字母排序
 - 隐藏不必要的文件：`.git/` 等（可配置）
+
+---
+
+## 11. v0.1.20 版本变更设计说明
+
+### 11.1 ReadonlyFileViewer 架构简化
+
+**变更动机**:
+- **gopls 兼容性问题**: 自定义 `go-dep:` scheme 导致 gopls 无法索引依赖源码文件
+- **用户体验限制**: 在依赖源码中无法进行 Cmd+Click 跳转到其他依赖
+- **架构复杂性**: 自定义 TextDocumentContentProvider 增加了不必要的复杂度
+
+**架构对比**:
+
+**v0.1.19 架构（自定义 scheme）**:
+```
+用户点击文件
+    ↓
+goDepsExplorer.openFile 命令
+    ↓
+ReadonlyFileViewer.openFile()
+    ↓
+创建 go-dep:filename?fsPath URI
+    ↓
+VSCode 调用 DepFileContentProvider.provideTextDocumentContent()
+    ↓
+读取文件内容并返回字符串
+    ↓
+VSCode 显示只读文档（gopls 无法索引）
+```
+
+**v0.1.20 架构（原生 file:// URI）**:
+```
+用户点击文件
+    ↓
+goDepsExplorer.openFile 命令
+    ↓
+ReadonlyFileViewer.openFile()
+    ↓
+创建 vscode.Uri.file(fsPath)
+    ↓
+VSCode 直接打开文件（gopls 正常索引）
+    ↓
+支持完整的语言服务功能（跳转、高亮、智能提示）
+```
+
+### 11.2 技术实现变更
+
+**移除的组件**:
+- `DepFileContentProvider` 类
+- 自定义 `go-dep:` URI scheme 注册
+- `TextDocumentContentProvider` 接口实现
+- URI query 参数编解码逻辑
+
+**简化的实现**:
+```typescript
+class ReadonlyFileViewer {
+  // v0.1.20: 大幅简化的实现
+  async openFile(fsPath: string): Promise<void> {
+    const uri = vscode.Uri.file(fsPath);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { 
+      preview: true,
+      preserveFocus: false 
+    });
+  }
+}
+```
+
+### 11.3 用户体验提升
+
+| 功能项 | v0.1.19 (自定义 scheme) | v0.1.20 (原生 file://) |
+|--------|------------------------|------------------------|
+| **语法高亮** | ✅ 基础高亮 | ✅ 完整的 gopls 高亮 |
+| **智能提示** | ❌ 不支持 | ✅ 完整的代码提示 |
+| **跳转到定义** | ❌ 不支持 | ✅ Cmd+Click 跳转支持 |
+| **代码补全** | ❌ 不支持 | ✅ 完整的自动补全 |
+| **错误提示** | ❌ 不支持 | ✅ 实时错误检测 |
+| **依赖间跳转** | ❌ 不支持 | ✅ 跨依赖跳转并定位 |
+
+### 11.4 向后兼容性
+
+**完全兼容**: 此次变更不影响任何用户可见的API或配置项，仅为内部实现的重构。
+
+**用户体验改进**: 用户将获得更好的代码编辑体验，但操作方式保持不变。
