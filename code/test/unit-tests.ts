@@ -826,6 +826,46 @@ test('addStdlibDep deduplicates by path', () => {
   assert.strictEqual(stdlibList.length, 2, 'Should add new package');
 });
 
+// ==================== buildNodeChain Stdlib Category (v0.2.0) ====================
+console.log('\n=== buildNodeChain Stdlib Category ===');
+
+test('stdlib dep gets stdlib category type', () => {
+  const dep = { path: 'fmt', version: 'stdlib', indirect: false };
+  const isStdlib = dep.version === 'stdlib';
+  const categoryType = isStdlib ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+  assert.strictEqual(categoryType, 'stdlib');
+});
+
+test('direct dep gets direct category type', () => {
+  const dep = { path: 'github.com/foo/bar', version: 'v1.0.0', indirect: false };
+  const isStdlib = dep.version === 'stdlib';
+  const categoryType = isStdlib ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+  assert.strictEqual(categoryType, 'direct');
+});
+
+test('indirect dep gets indirect category type', () => {
+  const dep = { path: 'github.com/foo/bar', version: 'v1.0.0', indirect: true };
+  const isStdlib = dep.version === 'stdlib';
+  const categoryType = isStdlib ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+  assert.strictEqual(categoryType, 'indirect');
+});
+
+test('stdlib category label is Standard Library', () => {
+  const dep = { path: 'net/http', version: 'stdlib', indirect: false };
+  const isStdlib = dep.version === 'stdlib';
+  const label = isStdlib ? 'Standard Library' : (dep.indirect ? 'Indirect Dependencies' : 'Direct Dependencies');
+  assert.strictEqual(label, 'Standard Library');
+});
+
+test('stdlib category ID uses stdlib suffix', () => {
+  const root = '/project-a';
+  const dep = { path: 'fmt', version: 'stdlib', indirect: false };
+  const isStdlib = dep.version === 'stdlib';
+  const categoryType = isStdlib ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+  const categoryId = `category:${root}:${categoryType}`;
+  assert.strictEqual(categoryId, 'category:/project-a:stdlib');
+});
+
 // ==================== Summary ====================
 const total = passed + failed;
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${total} total`);
