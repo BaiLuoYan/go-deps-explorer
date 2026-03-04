@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] - 2026-03-04
+
+### Fixed
+- When the dependency tree is dragged to the sidebar, hover tooltip now shows "Go Deps Explorer" instead of "Explorer" (added `contextualTitle`)
+
 ## [0.2.2] - 2026-03-04
 
 ### Changed
