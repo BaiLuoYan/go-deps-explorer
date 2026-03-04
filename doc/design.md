@@ -837,7 +837,50 @@ class DependencyTreeProvider {
 }
 ```
 
-### 2.12 EditorTracker 只读触发增强
+### 2.11 默认折叠状态设计
+
+**v0.2.0 变更**: 所有树节点默认为折叠状态，而不是展开状态。
+
+```typescript
+getTreeItem(element: TreeNode): vscode.TreeItem {
+  // Project 和 Category 节点
+  if (element is ProjectNode || element is CategoryNode) {
+    const item = new vscode.TreeItem(
+      element.label,
+      vscode.TreeItemCollapsibleState.Collapsed  // v0.2.0: 默认折叠（之前是 Expanded）
+    );
+    return item;
+  }
+}
+```
+
+### 2.12 buildNodeChain Stdlib 修复
+
+**v0.2.0 修复**: `buildNodeChain` 现在正确检查 `dep.version === 'stdlib'`，确保标准库依赖放在 "Standard Library" 分类下。
+
+```typescript
+class DependencyTreeProvider {
+  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode } {
+    // v0.2.0 修复：正确判断标准库依赖的分类
+    const categoryType = dep.version === 'stdlib' ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
+    
+    // 获取或创建分类节点
+    const categoryNode = this.getOrCreateCategoryNode(categoryType, root);
+    
+    // 创建依赖节点
+    const depNode = this.getOrCreateDependencyNode(dep, categoryNode, sourcePath);
+    
+    // 如果指定了文件路径，构建文件节点链
+    if (filePath) {
+      const fileNode = this.buildFileNodeChain(depNode, sourcePath, filePath);
+      return { depNode, fileNode };
+    }
+    
+    return { depNode };
+  }
+}
+```
+### 2.13 EditorTracker 只读触发增强
 
 **v0.2.5 新增**: 为解决 Cmd+Click 跳转打开的文件不会自动标记只读的问题。
 
@@ -891,32 +934,6 @@ class EditorTracker {
 - 在依赖树定位之前执行，确保用户看到的文件已经是只读状态
 - 保持与 v0.2.4 的兼容性处理（try/catch 包裹）
 
-### 2.12 buildNodeChain Stdlib 修复
-
-**v0.2.0 修复**: `buildNodeChain` 现在正确检查 `dep.version === 'stdlib'`，确保标准库依赖放在 "Standard Library" 分类下。
-
-```typescript
-class DependencyTreeProvider {
-  private buildNodeChain(root: string, dep: DependencyInfo, sourcePath: string, filePath?: string): { depNode: DependencyNode; fileNode?: FileNode } {
-    // v0.2.0 修复：正确判断标准库依赖的分类
-    const categoryType = dep.version === 'stdlib' ? 'stdlib' : (dep.indirect ? 'indirect' : 'direct');
-    
-    // 获取或创建分类节点
-    const categoryNode = this.getOrCreateCategoryNode(categoryType, root);
-    
-    // 创建依赖节点
-    const depNode = this.getOrCreateDependencyNode(dep, categoryNode, sourcePath);
-    
-    // 如果指定了文件路径，构建文件节点链
-    if (filePath) {
-      const fileNode = this.buildFileNodeChain(depNode, sourcePath, filePath);
-      return { depNode, fileNode };
-    }
-    
-    return { depNode };
-  }
-}
-```
 
 ## 3. 核心流程
 
