@@ -1067,9 +1067,9 @@ code/
 }
 ```
 
-## 8. v0.1.11 版本变更设计说明
+## 6. v0.1.11 版本变更设计说明
 
-### 8.1 EditorTracker 重构
+### 6.1 EditorTracker 重构
 
 **问题描述**: 
 - `isDependencyFile()` 方法中使用了 `Promise` 来检测 `GOROOT`，但该方法返回类型为 `boolean` 而非 `async`
@@ -1108,7 +1108,7 @@ class EditorTracker {
 }
 ```
 
-### 8.2 DependencyTreeProvider 标准库搜索
+### 6.2 DependencyTreeProvider 标准库搜索
 
 **问题描述**: 
 - `findNodeForFile()` 方法只搜索 `this.projects`（模块依赖），不搜索 `this.stdlibDeps`（标准库依赖）
@@ -1138,7 +1138,7 @@ class DependencyTreeProvider {
 }
 ```
 
-### 8.3 技术影响评估
+### 6.3 技术影响评估
 
 | 变更项 | 影响范围 | 向后兼容性 |
 |--------|----------|------------|
@@ -1147,7 +1147,7 @@ class DependencyTreeProvider {
 | isDependencyFile() 同步化 | 编辑器跳转响应速度 | 性能提升 |
 | findNodeForFile() 标准库支持 | 标准库文件跳转定位 | 功能增强 |
 
-## 9. 第三方依赖
+## 7. 第三方依赖
 
 | 包名 | 用途 | 说明 |
 |------|------|------|
@@ -1159,9 +1159,9 @@ class DependencyTreeProvider {
 
 **无运行时依赖**：全部使用 VSCode 内置 API 和 Node.js 标准库。
 
-## 10. 关键实现细节
+## 8. 关键实现细节
 
-### 7.1 获取直接/间接依赖
+### 8.1 获取直接/间接依赖
 
 ```typescript
 // 执行 go list -m -json all，解析 JSON 流
@@ -1203,7 +1203,7 @@ function parseJsonStream(text: string): any[] {
 }
 ```
 
-### 7.2 vendor vs $GOPATH/pkg/mod 判断
+### 8.2 vendor vs $GOPATH/pkg/mod 判断
 
 ```typescript
 function getSourcePath(dep: DependencyInfo, projectRoot: string, config: ConfigManager): string {
@@ -1225,7 +1225,7 @@ function getSourcePath(dep: DependencyInfo, projectRoot: string, config: ConfigM
 }
 ```
 
-### 7.3 DependencyNode 的 TreeItem 表示
+### 8.3 DependencyNode 的 TreeItem 表示
 
 ```typescript
 // 依赖包根节点
@@ -1280,7 +1280,7 @@ getTreeItem(node: DependencyNode): vscode.TreeItem {
 }
 ```
 
-### 7.4 跳转定位的路径匹配
+### 8.4 跳转定位的路径匹配
 
 ```typescript
 // 从文件绝对路径中提取 module@version
@@ -1308,7 +1308,7 @@ function extractModuleFromPath(filePath: string): { modulePath: string; version:
 }
 ```
 
-### 7.5 懒加载策略
+### 8.5 懒加载策略
 
 - DependencyNode 初始 `collapsibleState = Collapsed`，不预加载子目录
 - 用户展开时 `getChildren()` 才读取 `fs.readdir()`
@@ -1318,9 +1318,9 @@ function extractModuleFromPath(filePath: string): { modulePath: string; version:
 
 ---
 
-## 11. v0.1.20 版本变更设计说明
+## 9. v0.1.20 版本变更设计说明
 
-### 11.1 ReadonlyFileViewer 架构简化
+### 9.1 ReadonlyFileViewer 架构简化
 
 **变更动机**:
 - **gopls 兼容性问题**: 自定义 `go-dep:` scheme 导致 gopls 无法索引依赖源码文件
@@ -1361,7 +1361,7 @@ VSCode 直接打开文件（gopls 正常索引）
 支持完整的语言服务功能（跳转、高亮、智能提示）
 ```
 
-### 11.2 技术实现变更
+### 9.2 技术实现变更
 
 **移除的组件**:
 - `DepFileContentProvider` 类
@@ -1384,7 +1384,7 @@ class ReadonlyFileViewer {
 }
 ```
 
-### 11.3 用户体验提升
+### 9.3 用户体验提升
 
 | 功能项 | v0.1.19 (自定义 scheme) | v0.1.20 (原生 file://) |
 |--------|------------------------|------------------------|
@@ -1395,7 +1395,7 @@ class ReadonlyFileViewer {
 | **错误提示** | ❌ 不支持 | ✅ 实时错误检测 |
 | **依赖间跳转** | ❌ 不支持 | ✅ 跨依赖跳转并定位 |
 
-### 11.4 向后兼容性
+### 9.4 向后兼容性
 
 **完全兼容**: 此次变更不影响任何用户可见的API或配置项，仅为内部实现的重构。
 
@@ -1403,9 +1403,9 @@ class ReadonlyFileViewer {
 
 ---
 
-## 12. v0.2.1~v0.2.3 图标实现设计
+## 10. v0.2.1~v0.2.3 图标实现设计
 
-### 12.1 v0.2.1 - 插件图标实现
+### 10.1 v0.2.1 - 插件图标实现
 
 #### 12.1.1 扩展图标 (icon.png)
 
@@ -1446,7 +1446,7 @@ class ReadonlyFileViewer {
 }
 ```
 
-### 12.2 v0.2.2 - 图标微调
+### 10.2 v0.2.2 - 图标微调
 
 #### 12.2.1 tree-icon.svg 视觉优化
 
@@ -1470,7 +1470,7 @@ class ReadonlyFileViewer {
 </svg>
 ```
 
-### 12.3 v0.2.3 - 侧边栏提示修复
+### 10.3 v0.2.3 - 侧边栏提示修复
 
 #### 12.3.1 contextualTitle 实现
 
@@ -1499,7 +1499,7 @@ class ReadonlyFileViewer {
 - 提升用户体验和插件品牌识别度
 - 保持与插件功能的一致性
 
-### 12.4 文件资源管理
+### 10.4 文件资源管理
 
 #### 12.4.1 图标文件位置
 ```
