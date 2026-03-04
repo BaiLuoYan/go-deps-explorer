@@ -753,89 +753,6 @@ class EditorTracker {
 
 ---
 
-## 11. v0.2.4 会话级只读模式设计
-
-### 11.1 功能恢复背景
-
-**v0.1.20 变更**: 从自定义 `go-dep:` scheme 迁移到原生 `file://` URI 以支持 gopls 语言服务器。
-
-**丢失功能**: 只读模式功能丢失，用户可以修改依赖源码文件。
-
-**v0.2.4 目标**: 恢复只读模式，但使用会话级只读而非文件级只读。
-
-### 11.2 会话级只读实现
-
-**核心机制**: 使用 VS Code 内置命令 `workbench.action.files.setActiveEditorReadonlyInSession`
-
-**技术优势**:
-- **会话级**: 文件仅在当前 VS Code 会话中只读，重新打开后可正常编辑
-- **无副作用**: 不修改文件系统权限，不影响其他编辑器
-- **gopls 兼容**: 保持 `file://` URI，语言服务器正常工作
-
-```typescript
-class ReadonlyFileViewer {
-  async openFile(fsPath: string): Promise<void> {
-    const uri = vscode.Uri.file(fsPath);
-    const doc = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(doc, { 
-      preview: true,
-      preserveFocus: false 
-    });
-    
-    // v0.2.4 新增：设置会话级只读
-    try {
-      await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
-    } catch (error) {
-      // 兼容旧版 VS Code (< 1.79)，命令不存在时静默忽略
-      this.outputChannel?.appendLine(`SetReadonly command not available: ${error}`);
-    }
-  }
-}
-```
-
-### 11.3 版本兼容性设计
-
-**目标版本**: VS Code 1.79+ 支持该命令
-
-**兼容策略**: try/catch 包裹，命令不存在时静默降级
-
-**降级行为**:
-- VS Code 1.79+: 文件标记为会话级只读
-- VS Code < 1.79: 文件可编辑（与 v0.1.20 行为一致）
-
-**错误处理**:
-```typescript
-try {
-  await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
-} catch (error) {
-  // 记录到 Output Channel，但不影响用户体验
-  if (error.message.includes('command not found') || 
-      error.message.includes('not available')) {
-    // 预期的兼容性问题，静默处理
-    this.outputChannel?.appendLine(`Session readonly not supported in this VS Code version`);
-  } else {
-    // 意外错误，记录详细信息
-    this.outputChannel?.appendLine(`Failed to set readonly: ${error}`);
-  }
-}
-```
-
-### 11.4 用户体验对比
-
-| 版本 | 只读模式 | gopls 支持 | 兼容性 |
-|------|---------|------------|--------|
-| **v0.1.19** | ✅ 完全只读（自定义 scheme） | ❌ 无语言服务器支持 | 全版本 |
-| **v0.1.20** | ❌ 可编辑 | ✅ 完整语言服务器支持 | 全版本 |
-| **v0.2.4** | ✅ 会话级只读 | ✅ 完整语言服务器支持 | VS Code 1.79+ |
-
-### 11.5 实现位置
-
-**文件**: `src/readonlyFileViewer.ts`
-
-**修改点**: `openFile()` 方法在 `showTextDocument()` 后添加命令调用
-
-**影响范围**: 仅影响依赖源码文件打开流程，不影响其他功能
-
 ### 2.9.6 Extension 初始化
 
 ```typescript
@@ -1619,3 +1536,86 @@ code/
 - 图标文件必须位于扩展根目录或被正确引用
 - SVG 图标自动支持主题色彩适配 (currentColor)
 - PNG 图标建议提供高分辨率版本适配高 DPI 显示器
+## 11. v0.2.4 会话级只读模式设计
+
+### 11.1 功能恢复背景
+
+**v0.1.20 变更**: 从自定义 `go-dep:` scheme 迁移到原生 `file://` URI 以支持 gopls 语言服务器。
+
+**丢失功能**: 只读模式功能丢失，用户可以修改依赖源码文件。
+
+**v0.2.4 目标**: 恢复只读模式，但使用会话级只读而非文件级只读。
+
+### 11.2 会话级只读实现
+
+**核心机制**: 使用 VS Code 内置命令 `workbench.action.files.setActiveEditorReadonlyInSession`
+
+**技术优势**:
+- **会话级**: 文件仅在当前 VS Code 会话中只读，重新打开后可正常编辑
+- **无副作用**: 不修改文件系统权限，不影响其他编辑器
+- **gopls 兼容**: 保持 `file://` URI，语言服务器正常工作
+
+```typescript
+class ReadonlyFileViewer {
+  async openFile(fsPath: string): Promise<void> {
+    const uri = vscode.Uri.file(fsPath);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { 
+      preview: true,
+      preserveFocus: false 
+    });
+    
+    // v0.2.4 新增：设置会话级只读
+    try {
+      await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
+    } catch (error) {
+      // 兼容旧版 VS Code (< 1.79)，命令不存在时静默忽略
+      this.outputChannel?.appendLine(`SetReadonly command not available: ${error}`);
+    }
+  }
+}
+```
+
+### 11.3 版本兼容性设计
+
+**目标版本**: VS Code 1.79+ 支持该命令
+
+**兼容策略**: try/catch 包裹，命令不存在时静默降级
+
+**降级行为**:
+- VS Code 1.79+: 文件标记为会话级只读
+- VS Code < 1.79: 文件可编辑（与 v0.1.20 行为一致）
+
+**错误处理**:
+```typescript
+try {
+  await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
+} catch (error) {
+  // 记录到 Output Channel，但不影响用户体验
+  if (error.message.includes('command not found') || 
+      error.message.includes('not available')) {
+    // 预期的兼容性问题，静默处理
+    this.outputChannel?.appendLine(`Session readonly not supported in this VS Code version`);
+  } else {
+    // 意外错误，记录详细信息
+    this.outputChannel?.appendLine(`Failed to set readonly: ${error}`);
+  }
+}
+```
+
+### 11.4 用户体验对比
+
+| 版本 | 只读模式 | gopls 支持 | 兼容性 |
+|------|---------|------------|--------|
+| **v0.1.19** | ✅ 完全只读（自定义 scheme） | ❌ 无语言服务器支持 | 全版本 |
+| **v0.1.20** | ❌ 可编辑 | ✅ 完整语言服务器支持 | 全版本 |
+| **v0.2.4** | ✅ 会话级只读 | ✅ 完整语言服务器支持 | VS Code 1.79+ |
+
+### 11.5 实现位置
+
+**文件**: `src/readonlyFileViewer.ts`
+
+**修改点**: `openFile()` 方法在 `showTextDocument()` 后添加命令调用
+
+**影响范围**: 仅影响依赖源码文件打开流程，不影响其他功能
+
