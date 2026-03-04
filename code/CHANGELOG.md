@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.20] - 2026-03-04
+
+### Changed
+- Dependency source files now open via native `file://` URI instead of custom `go-dep:` scheme
+- This enables Cmd+Click (Go to Definition) to work within dependency source code, as gopls can properly index files opened with standard file URIs
+
 ## [0.1.19] - 2026-03-04
 
 ### Changed
