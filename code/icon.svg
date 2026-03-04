@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <circle cx="64" cy="64" r="64" fill="#00ADD8"/>
+  
+  <!-- "Go" text, centered with tree midpoint (66) -->
+  <text x="16" y="66" font-family="Arial Narrow, Roboto Condensed, sans-serif" font-size="38" font-weight="600" fill="white" letter-spacing="-1">Go</text>
+  
+  <!-- Tree -->
+  <line x1="76" y1="36" x2="76" y2="96" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <line x1="76" y1="44" x2="96" y2="44" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="104" cy="44" r="6" fill="white"/>
+  
+  <line x1="76" y1="66" x2="96" y2="66" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="104" cy="66" r="6" fill="white"/>
+  
+  <line x1="76" y1="88" x2="96" y2="88" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="104" cy="88" r="6" fill="white"/>
+</svg>

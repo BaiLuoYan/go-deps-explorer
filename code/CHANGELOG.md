@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-03-04
+
+### Added
+- Extension icon (Go blue circle + dependency tree) for VS Marketplace, Open VSX, and package display
+- Custom tree view icon for the sidebar/activity bar (replaces default file icon)
+
 ## [0.2.0] - 2026-03-04
 
 ### Added

@@ -3,8 +3,9 @@
   "displayName": "Go Deps Explorer",
   "description": "Browse, explore, and navigate Go project dependencies directly in VS Code. Supports direct/indirect deps, standard library, replace directives, multi-project workspaces, and Cmd+Click jump tracking.",
   "keywords": ["go", "golang", "dependencies", "explorer", "go.mod", "module", "dependency tree", "stdlib", "replace", "workspace"],
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "BaiLuoYan",
+  "icon": "icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +27,8 @@
         {
           "id": "goDepsExplorer",
           "name": "Go Dependencies",
-          "when": "goDepsExplorer.hasGoMod"
+          "when": "goDepsExplorer.hasGoMod",
+          "icon": "tree-icon.svg"
         }
       ]
     },
