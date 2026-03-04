@@ -975,6 +975,8 @@ code/
 │   │   ├── folder.svg           # 目录图标
 │   │   └── go-file.svg          # Go 文件图标
 │   └── logo.png                 # 扩展 logo
+├── icon.png                     # 扩展图标（v0.2.1 新增）
+├── tree-icon.svg                # 侧边栏自定义图标（v0.2.1 新增）
 ├── package.json                 # VSCode 扩展清单
 ├── tsconfig.json                # TypeScript 配置
 ├── .eslintrc.json               # ESLint 配置
@@ -995,6 +997,7 @@ code/
   "publisher": "TBD",
   "engines": { "vscode": "^1.75.0" },
   "categories": ["Other"],
+  "icon": "icon.png",
   "activationEvents": ["workspaceContains:**/go.mod"],
   "main": "./out/extension.js",
   "contributes": {
@@ -1002,6 +1005,8 @@ code/
       "explorer": [{
         "id": "goDepsExplorer",
         "name": "Go Dependencies",
+        "icon": "tree-icon.svg",
+        "contextualTitle": "Go Deps Explorer",
         "when": "goDepsExplorer.hasGoMod"
       }]
     },
@@ -1395,3 +1400,137 @@ class ReadonlyFileViewer {
 **完全兼容**: 此次变更不影响任何用户可见的API或配置项，仅为内部实现的重构。
 
 **用户体验改进**: 用户将获得更好的代码编辑体验，但操作方式保持不变。
+
+---
+
+## 12. v0.2.1~v0.2.3 图标实现设计
+
+### 12.1 v0.2.1 - 插件图标实现
+
+#### 12.1.1 扩展图标 (icon.png)
+
+**技术规格**:
+- **尺寸**: 128x128px PNG 格式
+- **设计元素**: Go 蓝色圆形背景 + 白色依赖树图案
+- **颜色方案**: 
+  - 背景：Go 官方蓝色 (#00ADD8)
+  - 图案：白色 (#FFFFFF)
+- **用途**: 扩展市场展示、扩展管理器图标
+
+**package.json 配置**:
+```json
+{
+  "icon": "icon.png"
+}
+```
+
+#### 12.1.2 侧边栏图标 (tree-icon.svg)
+
+**技术规格**:
+- **格式**: SVG 矢量图标
+- **设计**: 自定义树形结构图案，简洁清晰
+- **用途**: Activity Bar 和侧边栏面板图标，替代默认文件图标
+
+**package.json 配置**:
+```json
+{
+  "contributes": {
+    "views": {
+      "explorer": [{
+        "id": "goDepsExplorer",
+        "name": "Go Dependencies",
+        "icon": "tree-icon.svg"
+      }]
+    }
+  }
+}
+```
+
+### 12.2 v0.2.2 - 图标微调
+
+#### 12.2.1 tree-icon.svg 视觉优化
+
+**调整内容**:
+- 树形竖线上下延长，增强视觉连贯性
+- 优化线条粗细和间距，提升在小尺寸下的清晰度
+- 调整节点大小和位置，确保视觉平衡
+
+**实现方式**:
+```svg
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- 优化后的树形结构路径 -->
+  <path d="M3,2 L3,22 M3,6 L8,6 M3,12 L8,12 M8,12 L8,18 M8,15 L13,15 M8,18 L13,18" 
+        stroke="currentColor" 
+        stroke-width="1.5" 
+        fill="none"/>
+  <!-- 节点圆点 -->
+  <circle cx="8" cy="6" r="2" fill="currentColor"/>
+  <circle cx="13" cy="15" r="2" fill="currentColor"/>
+  <circle cx="13" cy="18" r="2" fill="currentColor"/>
+</svg>
+```
+
+### 12.3 v0.2.3 - 侧边栏提示修复
+
+#### 12.3.1 contextualTitle 实现
+
+**问题描述**:
+- 用户将面板拖拽到侧边栏后，鼠标悬浮显示"资源管理器"而非插件名称
+- 影响用户对插件功能的识别和理解
+
+**解决方案**:
+```json
+{
+  "contributes": {
+    "views": {
+      "explorer": [{
+        "id": "goDepsExplorer",
+        "name": "Go Dependencies", 
+        "icon": "tree-icon.svg",
+        "contextualTitle": "Go Deps Explorer"
+      }]
+    }
+  }
+}
+```
+
+**效果**:
+- 拖拽到侧边栏后，悬浮提示显示"Go Deps Explorer"
+- 提升用户体验和插件品牌识别度
+- 保持与插件功能的一致性
+
+### 12.4 文件资源管理
+
+#### 12.4.1 图标文件位置
+```
+code/
+├── icon.png              # 扩展主图标（128x128px）
+├── tree-icon.svg         # 侧边栏图标（矢量）
+└── resources/
+    └── icons/             # 其他内置图标资源
+        ├── dependency.svg
+        ├── dependency-indirect.svg
+        └── ...
+```
+
+#### 12.4.2 构建和发布
+
+**构建配置** (.vscodeignore):
+```
+# 确保图标文件包含在发布包中
+!icon.png
+!tree-icon.svg
+```
+
+**版本管理**:
+- v0.2.1: 新增两个图标文件
+- v0.2.2: 仅更新 tree-icon.svg 内容
+- v0.2.3: 仅更新 package.json 配置，无新文件
+
+---
+
+**技术约束**:
+- VSCode 支持的图标格式：PNG (扩展图标)、SVG (视图图标)
+- 图标文件必须位于扩展根目录或被正确引用
+- SVG 图标自动支持主题色彩适配 (currentColor)
+- PNG 图标建议提供高分辨率版本适配高 DPI 显示器
