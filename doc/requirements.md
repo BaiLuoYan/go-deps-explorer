@@ -158,6 +158,7 @@ project2/
 | F14.1 | 使用 try/catch 包裹命令调用，确保旧版 VS Code (< 1.79) 兼容性 | P0 |
 | F14.2 | 恢复从 `go-dep:` scheme 迁移到 `file://` URI 时丢失的只读功能 | P0 |
 | F14.3 | 会话级只读：文件在当前 VS Code 会话中只读，重新打开后可正常编辑 | P0 |
+| F14.4 | Cmd+Click 跳转打开的文件只读修复：在 EditorTracker.onEditorChanged() 中，检测到 isDependencyFile 后立即调用只读命令 | P0 |
 
 ## 3. 非功能需求
 

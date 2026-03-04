@@ -837,36 +837,59 @@ class DependencyTreeProvider {
 }
 ```
 
-### 2.11 默认折叠状态设计
+### 2.12 EditorTracker 只读触发增强
 
-**v0.2.0 变更**: 所有树节点默认为折叠状态，而不是展开状态。
+**v0.2.5 新增**: 为解决 Cmd+Click 跳转打开的文件不会自动标记只读的问题。
 
 ```typescript
-class DependencyTreeProvider {
-  // v0.2.0 变更：getTreeItem 默认折叠状态
-  getTreeItem(element: TreeNode): vscode.TreeItem {
-    if (element.type === NodeType.Project) {
-      const item = new vscode.TreeItem(
-        element.displayName,
-        vscode.TreeItemCollapsibleState.Collapsed  // v0.2.0: 默认折叠
-      );
-      // ... 其他属性设置 ...
-      return item;
-    }
+class EditorTracker {
+  private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
+    const filePath = editor.document.uri.fsPath;
     
-    if (element.type === NodeType.Category) {
-      const item = new vscode.TreeItem(
-        element.label,
-        vscode.TreeItemCollapsibleState.Collapsed  // v0.2.0: 默认折叠
-      );
-      // ... 其他属性设置 ...
-      return item;
+    // 跟踪 lastProjectRoot
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    if (workspaceFolder) {
+      this.lastProjectRoot = workspaceFolder.uri.fsPath;
     }
-    
-    // ... 其他节点类型 ...
+
+    // 判断文件是否在某个依赖包路径下
+    if (this.isDependencyFile(filePath)) {
+      // v0.2.5 新增：Cmd+Click 跳转的文件立即标记只读
+      try {
+        await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession');
+      } catch (error) {
+        this.outputChannel.appendLine(`Failed to set readonly for jumped file: ${error}`);
+      }
+      
+      // 查找对应的依赖包和文件节点
+      const result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
+      
+      if (result?.depNode) {
+        // 触发依赖包显示 (lazy mode)
+        this.treeProvider.revealDep(
+          this.resolveProjectRoot(result.depNode), 
+          result.depNode.dep
+        );
+        
+        // 定位到文件节点
+        if (result?.fileNode) {
+          await this.treeView.reveal(result.fileNode, { select: true, focus: false, expand: false });
+        }
+      }
+    }
   }
 }
 ```
+
+**问题修复**:
+- **v0.2.4 及之前**: 只有通过依赖树点击打开的文件会调用 `ReadonlyFileViewer.openFile()` 标记只读
+- **Cmd+Click 问题**: 通过 gopls 跳转 (Cmd+Click) 打开的依赖文件直接由 VSCode 处理，不经过插件的 openFile 流程
+- **v0.2.5 修复**: 在 `EditorTracker.onEditorChanged()` 中检测到依赖文件后立即调用只读命令
+
+**执行时机**:
+- 无论文件通过哪种方式打开（树点击 or Cmd+Click），只要是依赖文件都会被标记只读
+- 在依赖树定位之前执行，确保用户看到的文件已经是只读状态
+- 保持与 v0.2.4 的兼容性处理（try/catch 包裹）
 
 ### 2.12 buildNodeChain Stdlib 修复
 
