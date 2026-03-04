@@ -112,6 +112,8 @@
 
 | **TC-NEW-17** | **handleReplace=true 时依赖显示替换路径和 replace 图标（v0.1.14 验证）** | **go.mod 包含 replace github.com/user/pkg => ../local/pkg，设置 handleReplace=true** | **该依赖包在树中显示替换后路径，带有 arrow-swap 图标和 "→ replaced" 描述** |
 
+| **TC-NEW-18** | **工作空间模式下项目节点名称和顺序验证（v0.1.19 新增）** | **.code-workspace 文件定义项目名称为 "Frontend"、"Backend"、"Shared"，对应目录为 web/、api/、common/** | **依赖树中项目节点按 workspace 文件中的名称显示（Frontend、Backend、Shared）和顺序排列，而不是目录名称（web、api、common）** |
+
 ### 2.7 新增功能测试用例 (v0.1.11)
 
 | 测试编号 | 测试用例描述 | 输入数据 | 预期结果 |

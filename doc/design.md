@@ -50,10 +50,11 @@
 **activate() 流程**:
 1. 初始化 ConfigManager
 2. 扫描工作区所有 go.mod（支持单项目和多项目工作空间）
-3. 创建 DependencyTreeProvider 并注册到 TreeView
-4. 创建 GoModWatcher 监听 go.mod 变化
-5. 创建 EditorTracker 监听编辑器切换
-6. 注册命令：手动刷新、打开文件
+3. 使用 findGoProjects() 获取项目信息，返回 `{ root, name }[]`，其中 name 来自 VSCode workspace folder API
+4. 创建 DependencyTreeProvider 并注册到 TreeView
+5. 创建 GoModWatcher 监听 go.mod 变化
+6. 创建 EditorTracker 监听编辑器切换
+7. 注册命令：手动刷新、打开文件
 
 **deactivate() 流程**:
 1. 销毁 watcher、tracker
@@ -160,6 +161,13 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   // 统一的节点管理器 - 确保每个节点只有一个实例
   private nodeMap = new Map<string, TreeNode>();
   
+  // v0.1.19 新增：项目名称映射和显示顺序
+  private projectNames = new Map<string, string>();    // projectRoot -> displayName
+  private projectOrder: string[] = [];                 // 按 workspace folders 顺序排列的 projectRoot
+  
+  // 初始化项目信息（v0.1.19 更新：接受带名称的项目数组）
+  initialize(projects: { root: string; name: string }[]): void;
+  
   // 返回树节点的子节点
   getChildren(element?: TreeNode): Promise<TreeNode[]>;
   
@@ -169,7 +177,7 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   // 返回节点的父节点（用于 reveal 定位）
   getParent(element: TreeNode): TreeNode | undefined;
   
-  // 刷新整棵树
+  // 刷新整棵树（v0.1.19 更新：保持项目名称和顺序）
   refresh(): void;
   
   // 定位到指定文件路径（供 EditorTracker 调用）
@@ -193,7 +201,7 @@ class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 ```
 if (element === undefined):  // 根节点
     if (工作空间模式 && 多个项目):
-        return ProjectNode[]
+        return ProjectNode[] (按 projectOrder 顺序排列，使用 projectNames 显示名称)
     else:
         return [CategoryNode("直接依赖"), CategoryNode("间接依赖")]
 
@@ -237,6 +245,7 @@ interface BaseNode {
 interface ProjectNode extends BaseNode {
   type: NodeType.Project;
   projectRoot: string;
+  displayName: string;       // v0.1.19 新增：来自 .code-workspace 的项目名称
   dependencies: DependencyInfo[];
 }
 
@@ -474,11 +483,11 @@ class ConfigManager {
 2. activate():
    a. 创建 ConfigManager
    b. 创建 GoModParser
-   c. 扫描工作区所有 go.mod 路径
-      - 单项目: vscode.workspace.workspaceFolders[0]
-      - 工作空间: 遍历所有 workspaceFolders，检查各自的 go.mod
+   c. 调用 findGoProjects() 扫描工作区项目，返回 { root, name }[]
+      - 单项目: vscode.workspace.workspaceFolders[0]，使用目录 basename 作为 name
+      - 工作空间: 遍历所有 workspaceFolders，name 来自 folder.name（VSCode workspace folder API）
    d. 对每个项目执行 goModParser.parseDependencies(root)
-   e. 创建 DependencyTreeProvider，传入依赖数据
+   e. 创建 DependencyTreeProvider，传入依赖数据和项目名称信息
    f. 注册 TreeView: vscode.window.createTreeView('goDepsExplorer', { treeDataProvider, showCollapseAll: true })
    g. 创建 GoModWatcher → 关联 treeProvider.refresh()
    h. 创建 EditorTracker → 关联 treeView
