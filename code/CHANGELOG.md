@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.6] - 2026-06-12
+
+### Fixed
+- **Multi-project directory**: auto-reveal and jump-tracking now correctly identifies the sub-project root when a workspace folder contains multiple Go sub-projects (each with their own `go.mod`). Previously `EditorTracker` resolved to the parent workspace folder, causing cross-project mislocation.
+
+### Changed
+- Migrated package manager from npm to pnpm
+- Removed unused `pendingReveal` field from `EditorTracker`
+- Replaced all `any` types with proper TypeScript types (`unknown[]`, `DependencyInfo`, `GoModule`, `GoPackage`)
+- ESLint now enforces `no-unused-private-class-members`; Prettier handles formatting (single quotes, semicolons)
+
 ## [0.2.5] - 2026-03-04
 
 ### Fixed

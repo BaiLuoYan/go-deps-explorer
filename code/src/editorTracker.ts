@@ -11,10 +11,15 @@ export class EditorTracker {
   private lastProjectRoot: string | undefined;
   private gorootSrc: string | undefined;
 
+  // All known sub-project roots, sorted longest-first for prefix matching
+  private projectRoots: string[] = [];
+
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
+    knownProjectRoots: string[],
   ) {
+    this.projectRoots = [...knownProjectRoots].sort((a, b) => b.length - a.length);
     this.outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
 
     // Listen for editor changes
@@ -85,9 +90,12 @@ export class EditorTracker {
     this.outputChannel.appendLine(`Editor changed: ${filePath}`);
 
     // Track the last known project root from non-dependency files
+    // Use the most specific (longest) known sub-project root that is a prefix of the file path,
+    // falling back to the workspace folder when no sub-project matches.
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
     if (workspaceFolder) {
-      this.lastProjectRoot = workspaceFolder.uri.fsPath;
+      const matchedRoot = this.projectRoots.find(r => filePath.startsWith(r + path.sep) || filePath === r);
+      this.lastProjectRoot = matchedRoot || workspaceFolder.uri.fsPath;
       this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
     }
 

@@ -51,7 +51,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // Editor tracker (jump-to-dependency feature)
-  const tracker = new EditorTracker(treeView, treeProvider);
+  const tracker = new EditorTracker(treeView, treeProvider, projectRoots.map(p => p.root));
   context.subscriptions.push({ dispose: () => tracker.dispose() });
 
   // Go.mod file watcher
