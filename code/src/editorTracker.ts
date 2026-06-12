@@ -90,17 +90,15 @@ export class EditorTracker {
     const filePath = editor.document.uri.fsPath;
     this.outputChannel.appendLine(`Editor changed: ${filePath}`);
 
-    // Track the last known project root from non-dependency files
-    // Use the most specific (longest) known sub-project root that is a prefix of the file path,
-    // falling back to the workspace folder when no sub-project matches.
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-    if (workspaceFolder) {
-      const matchedRoot = this.projectRoots.find(r => filePath.startsWith(r + path.sep) || filePath === r);
-      this.lastProjectRoot = matchedRoot || workspaceFolder.uri.fsPath;
-      this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
-    }
-
+    // Only update lastProjectRoot when the active file belongs to a known project
+    // (i.e. not a dependency file from GOPATH/pkg/mod or GOROOT/src)
     if (!this.isDependencyFile(filePath)) {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+      if (workspaceFolder) {
+        const matchedRoot = this.projectRoots.find(r => filePath.startsWith(r + path.sep) || filePath === r);
+        this.lastProjectRoot = matchedRoot || workspaceFolder.uri.fsPath;
+        this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
+      }
       this.outputChannel.appendLine('Not a dependency file, skipping');
       return;
     }

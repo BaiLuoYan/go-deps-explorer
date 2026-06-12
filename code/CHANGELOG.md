@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.9] - 2026-06-12
+
+### Fixed
+- **Cross-project dependency reveal**: jumping to a shared dependency (e.g. package D used by projects A, B, and C) now always reveals the correct project's dependency tree. Previously, navigating from A to D and then from B to D would incorrectly reveal A's tree because `lastProjectRoot` was being overwritten by the dependency file path itself. `lastProjectRoot` is now only updated when opening a project source file, not a dependency file.
+
 ## [0.2.8] - 2026-06-12
 
 ### Fixed
