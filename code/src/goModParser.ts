@@ -7,8 +7,6 @@ import { ConfigManager } from './configManager';
 import { getGopath } from './utils';
 import { parseJsonStream, isStandardLibraryPackage, parseGoModText } from './pure';
 
-const outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
-
 interface GoModule {
   Path: string;
   Version?: string;
@@ -27,11 +25,14 @@ interface GoPackage {
 }
 
 export class GoModParser {
-  constructor(private config: ConfigManager) {}
+  constructor(
+    private config: ConfigManager,
+    private outputChannel: vscode.OutputChannel,
+  ) {}
 
   async parseDependencies(projectRoot: string): Promise<DependencyInfo[]> {
     const deps = await this.runGoList(projectRoot);
-    outputChannel.appendLine(`[${projectRoot}] Loaded ${deps.length} dependencies (${deps.filter(d => !d.indirect).length} direct, ${deps.filter(d => d.indirect).length} indirect)`);
+    this.outputChannel.appendLine(`[${projectRoot}] Loaded ${deps.length} dependencies (${deps.filter(d => !d.indirect).length} direct, ${deps.filter(d => d.indirect).length} indirect)`);
     return deps;
   }
 
@@ -40,7 +41,7 @@ export class GoModParser {
       exec('go list -m -json all', { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, _stderr) => {
         if (error) {
           // Fallback: try parsing go.mod directly
-          outputChannel.appendLine(`[WARN] go list failed: ${error.message}, using go.mod fallback`);
+          this.outputChannel.appendLine(`[WARN] go list failed: ${error.message}, using go.mod fallback`);
           this.parseGoModFallback(cwd).then(resolve).catch(reject);
           return;
         }
@@ -113,7 +114,7 @@ export class GoModParser {
       // First get GOROOT
       exec('go env GOROOT', { cwd: projectRoot }, (error, goroot, _stderr) => {
         if (error) {
-          outputChannel.appendLine(`[WARN] Failed to get GOROOT: ${error.message}`);
+          this.outputChannel.appendLine(`[WARN] Failed to get GOROOT: ${error.message}`);
           resolve([]);
           return;
         }
@@ -123,7 +124,7 @@ export class GoModParser {
         // Then get project imports
         exec('go list -json ./...', { cwd: projectRoot, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, _stderr) => {
           if (error) {
-            outputChannel.appendLine(`[WARN] Failed to get project imports: ${error.message}`);
+            this.outputChannel.appendLine(`[WARN] Failed to get project imports: ${error.message}`);
             resolve([]);
             return;
           }
@@ -159,10 +160,10 @@ export class GoModParser {
               });
             }
             
-            outputChannel.appendLine(`[${projectRoot}] Found ${stdlibDeps.length} standard library packages`);
+            this.outputChannel.appendLine(`[${projectRoot}] Found ${stdlibDeps.length} standard library packages`);
             resolve(stdlibDeps);
           } catch (e) {
-            outputChannel.appendLine(`[ERROR] Failed to parse stdlib deps: ${e}`);
+            this.outputChannel.appendLine(`[ERROR] Failed to parse stdlib deps: ${e}`);
             resolve([]);
           }
         });

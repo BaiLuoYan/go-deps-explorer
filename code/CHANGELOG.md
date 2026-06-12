@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.8] - 2026-06-12
+
+### Fixed
+- **Duplicate output channel**: the "Go Deps Explorer" entry no longer appears twice in VS Code's Output panel dropdown. `OutputChannel` is now created once in `extension.ts` and injected into `GoModParser` and `EditorTracker` rather than each creating their own instance.
+
 ## [0.2.7] - 2026-06-12
 
 ### Fixed

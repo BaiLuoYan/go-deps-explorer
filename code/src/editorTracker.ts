@@ -18,9 +18,10 @@ export class EditorTracker {
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
     knownProjectRoots: string[],
+    outputChannel: vscode.OutputChannel,
   ) {
     this.projectRoots = [...knownProjectRoots].sort((a, b) => b.length - a.length);
-    this.outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
+    this.outputChannel = outputChannel;
 
     // Listen for editor changes
     this.disposables.push(

@@ -16,9 +16,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Set context for "when" clause
   vscode.commands.executeCommand('setContext', 'goDepsExplorer.hasGoMod', true);
 
+  // Single shared output channel for the entire extension
+  const outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
+  context.subscriptions.push(outputChannel);
+
   // Initialize core components
   const config = new ConfigManager();
-  const parser = new GoModParser(config);
+  const parser = new GoModParser(config, outputChannel);
   const treeProvider = new DependencyTreeProvider(parser, config);
 
   // Initialize dependencies
@@ -51,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // Editor tracker (jump-to-dependency feature)
-  const tracker = new EditorTracker(treeView, treeProvider, projectRoots.map(p => p.root));
+  const tracker = new EditorTracker(treeView, treeProvider, projectRoots.map(p => p.root), outputChannel);
   context.subscriptions.push({ dispose: () => tracker.dispose() });
 
   // Go.mod file watcher
