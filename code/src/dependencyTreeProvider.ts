@@ -40,14 +40,15 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     this.workspaceState?.update('revealedDeps', Array.from(this.revealedDeps));
   }
 
-  /** Called by EditorTracker to add a dep to the lazy tree and refresh */
-  revealDep(root: string, dep: DependencyInfo): void {
-    if (!this.config.lazyMode) { return; }
+  /** Called by EditorTracker to add a dep to the lazy tree and refresh. Returns true if tree was changed. */
+  revealDep(root: string, dep: DependencyInfo): boolean {
+    if (!this.config.lazyMode) { return false; }
     const key = `${root}:${dep.path}@${dep.version}`;
-    if (this.revealedDeps.has(key)) { return; }
+    if (this.revealedDeps.has(key)) { return false; }
     this.revealedDeps.add(key);
     this.saveRevealedDeps();
     this._onDidChangeTreeData.fire();
+    return true;
   }
 
   /** Dynamically add a stdlib package that wasn't in the initial go list output */
@@ -121,6 +122,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     switch (element.type) {
       case NodeType.Project: {
         const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = element.id;
         item.iconPath = new vscode.ThemeIcon('root-folder');
         item.contextValue = 'project';
         return item;
@@ -128,7 +130,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       case NodeType.Category: {
         let label: string;
         let iconName: string;
-        
+
         if (element.category === 'direct') {
           label = 'Direct Dependencies';
           iconName = 'folder-library';
@@ -139,15 +141,16 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
           label = 'Standard Library';
           iconName = 'symbol-package';
         }
-        
-        const count = element.category === 'stdlib' 
+
+        const count = element.category === 'stdlib'
           ? element.dependencies.length
           : element.dependencies.filter(d => element.category === 'direct' ? !d.indirect : d.indirect).length;
-        
+
         const item = new vscode.TreeItem(
           `${label} (${count})`,
           vscode.TreeItemCollapsibleState.Collapsed,
         );
+        item.id = element.id;
         item.iconPath = new vscode.ThemeIcon(iconName);
         item.contextValue = `category-${element.category}`;
         return item;
@@ -158,6 +161,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
           element.label,
           hasSource ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
         );
+        item.id = element.id;
         
         // Set icon based on dependency type and replace status
         if (element.dep.replace && this.config.handleReplace) {
@@ -183,12 +187,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       }
       case NodeType.Directory: {
         const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = element.id;
         item.iconPath = vscode.ThemeIcon.Folder;
         item.resourceUri = vscode.Uri.file(element.fsPath);
         return item;
       }
       case NodeType.File: {
         const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+        item.id = element.id;
         item.iconPath = vscode.ThemeIcon.File;
         item.resourceUri = vscode.Uri.file(element.fsPath);
         item.command = {

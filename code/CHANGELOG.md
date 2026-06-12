@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.10] - 2026-06-12
+
+### Fixed
+- **Cross-project stdlib reveal**: jumping to a stdlib file (e.g. `builtin`, `fmt`) from project B now correctly reveals B's dependency tree even when that stdlib package was first discovered via a jump from project A. Previously, dynamic stdlib discovery (`addStdlibDep`) only added the package to the first project that navigated to it; subsequent jumps from other projects would fall back to that first project's tree. The package is now also added to the preferred (current) project when the result belongs to a different project.
+- **Tree node identity**: all tree items now set an explicit `id` matching the node's namespaced ID (e.g. `file:projectRoot:/path`), preventing VS Code from conflating same-path nodes across different projects when calling `reveal()`.
+- **Async reveal race**: a version counter cancels stale `reveal()` calls when multiple `onDidChangeActiveTextEditor` events fire in quick succession.
+
 ## [0.2.9] - 2026-06-12
 
 ### Fixed

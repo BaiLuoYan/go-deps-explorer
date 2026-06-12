@@ -10,6 +10,7 @@ export class EditorTracker {
   private outputChannel: vscode.OutputChannel;
   private lastProjectRoot: string | undefined;
   private gorootSrc: string | undefined;
+  private revealVersion = 0;
 
   // All known sub-project roots, sorted longest-first for prefix matching
   private projectRoots: string[] = [];
@@ -88,7 +89,7 @@ export class EditorTracker {
 
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
     const filePath = editor.document.uri.fsPath;
-    this.outputChannel.appendLine(`Editor changed: ${filePath}`);
+    this.outputChannel.appendLine(`[EditorChanged] ${filePath}`);
 
     // Only update lastProjectRoot when the active file belongs to a known project
     // (i.e. not a dependency file from GOPATH/pkg/mod or GOROOT/src)
@@ -97,11 +98,13 @@ export class EditorTracker {
       if (workspaceFolder) {
         const matchedRoot = this.projectRoots.find(r => filePath.startsWith(r + path.sep) || filePath === r);
         this.lastProjectRoot = matchedRoot || workspaceFolder.uri.fsPath;
-        this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
+        this.outputChannel.appendLine(`[ProjectRoot] ${this.lastProjectRoot}`);
       }
-      this.outputChannel.appendLine('Not a dependency file, skipping');
       return;
     }
+
+    // Increment version to cancel any pending reveal from a previous call
+    const myVersion = ++this.revealVersion;
 
     // Mark dependency files as read-only (covers Cmd+Click jumps via gopls)
     try {
@@ -110,75 +113,88 @@ export class EditorTracker {
       // VS Code < 1.79: silently ignore
     }
 
-    this.outputChannel.appendLine(`Using project root: ${this.lastProjectRoot || 'none'}`);
+    // If another onEditorChanged fired while we awaited, abort this one
+    if (myVersion !== this.revealVersion) {
+      this.outputChannel.appendLine('[Reveal] Cancelled (superseded)');
+      return;
+    }
+
+    this.outputChannel.appendLine(`[Reveal] preferredRoot=${this.lastProjectRoot || 'none'}`);
 
     let result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
 
-    // If not found and file is under GOROOT/src, dynamically add the stdlib package
-    if (!result?.depNode && this.gorootSrc && filePath.startsWith(this.gorootSrc + path.sep)) {
-      const relativePath = path.relative(this.gorootSrc, filePath);
+    // If not found (or found under wrong project) and file is under GOROOT/src,
+    // dynamically add the stdlib package to the preferred project
+    const needsStdlibAdd = this.gorootSrc && filePath.startsWith(this.gorootSrc + path.sep) && this.lastProjectRoot && (
+      !result?.depNode || result.depNode.parent.projectRoot !== this.lastProjectRoot
+    );
+
+    if (needsStdlibAdd) {
+      const relativePath = path.relative(this.gorootSrc!, filePath);
       const segments = relativePath.split(path.sep);
-      // Find the package path — could be multi-level like "net/http" or single like "fmt"
-      // Walk up from file to find a directory that contains .go files at the expected package level
       let pkgPath = '';
       for (let i = 0; i < segments.length - 1; i++) {
         pkgPath = pkgPath ? pkgPath + '/' + segments[i] : segments[i];
       }
       if (pkgPath) {
-        const pkgDir = path.join(this.gorootSrc, pkgPath);
+        const pkgDir = path.join(this.gorootSrc!, pkgPath);
         const dep: DependencyInfo = {
           path: pkgPath,
           version: 'stdlib',
           indirect: false,
           dir: pkgDir,
         };
-        // Add to all projects (or preferred project)
-        const targetRoot = this.lastProjectRoot || Array.from(this.treeProvider['projects'].keys())[0];
-        if (targetRoot) {
-          this.treeProvider.addStdlibDep(targetRoot, dep);
-          this.outputChannel.appendLine(`Dynamically added stdlib dep: ${pkgPath} for ${targetRoot}`);
-          // Re-search after adding
-          result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
-        }
+        this.treeProvider.addStdlibDep(this.lastProjectRoot!, dep);
+        this.outputChannel.appendLine(`[Reveal] Added stdlib dep: ${pkgPath} for ${this.lastProjectRoot}`);
+        result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
       }
     }
 
     if (!result?.depNode) {
-      this.outputChannel.appendLine('No dependency node found for file');
+      this.outputChannel.appendLine('[Reveal] No dep node found');
       return;
     }
 
+    const depProjectRoot = result.depNode.parent.projectRoot;
+    this.outputChannel.appendLine(`[Reveal] Found dep=${result.depNode.dep.path} project=${depProjectRoot}`);
+
     // In lazy mode, ensure this dep is added to the revealed set
-    this.treeProvider.revealDep(result.depNode.parent.projectRoot, result.depNode.dep);
+    // revealDep fires _onDidChangeTreeData which may cause a tree refresh
+    const treeChanged = this.treeProvider.revealDep(depProjectRoot, result.depNode.dep);
 
-    this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
-
-    // Only reveal if the tree view is currently visible (don't force open the Explorer panel)
+    // Only reveal if the tree view is currently visible
     if (!this.treeView.visible) {
-      this.outputChannel.appendLine('Tree view not visible, skipping reveal');
+      this.outputChannel.appendLine('[Reveal] Tree not visible, skipping');
       return;
+    }
+
+    // If the tree was refreshed (lazy mode added new dep), wait for VSCode to process it
+    if (treeChanged) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      if (myVersion !== this.revealVersion) {
+        this.outputChannel.appendLine('[Reveal] Cancelled after tree refresh (superseded)');
+        return;
+      }
     }
 
     try {
       if (result.fileNode) {
-        // Reveal 到具体文件节点，VSCode 只展开该路径
         await this.treeView.reveal(result.fileNode, {
           select: true,
           focus: false,
           expand: false,
         });
-        this.outputChannel.appendLine(`Revealed file node: ${result.fileNode.fsPath}`);
-      } else if (result.depNode) {
-        // 没有文件节点时，reveal 到依赖包
+        this.outputChannel.appendLine(`[Reveal] OK file=${result.fileNode.id}`);
+      } else {
         await this.treeView.reveal(result.depNode, {
           select: true,
           focus: false,
           expand: 1,
         });
-        this.outputChannel.appendLine('Revealed dependency node (no file node)');
+        this.outputChannel.appendLine(`[Reveal] OK dep=${result.depNode.id}`);
       }
     } catch (e) {
-      this.outputChannel.appendLine(`Reveal failed: ${e}`);
+      this.outputChannel.appendLine(`[Reveal] FAILED: ${e}`);
     }
   }
 
