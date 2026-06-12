@@ -62,11 +62,11 @@ git clone https://github.com/BaiLuoYan/go-deps-explorer.git
 cd go-deps-explorer/code
 
 # 安装依赖并构建
-npm install
-npm run vscode:prepublish
+pnpm install
+pnpm vscode:prepublish
 
 # 打包成 VSIX
-npm run package
+pnpm package
 # 生成文件: go-deps-explorer-0.2.5.vsix
 ```
 

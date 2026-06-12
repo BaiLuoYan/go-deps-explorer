@@ -8,9 +8,9 @@
 
 ### 1.1 预构建检查清单
 发布前必须确认以下项目：
-- [ ] **代码质量**: 所有测试通过（`npm run test`）
-- [ ] **代码规范**: ESLint 检查通过（`npm run lint`）
-- [ ] **TypeScript**: 类型检查通过（`npx tsc --noEmit`）
+- [ ] **代码质量**: 所有测试通过（`pnpm test`）
+- [ ] **代码规范**: ESLint 检查通过（`pnpm lint`）
+- [ ] **TypeScript**: 类型检查通过（`pnpm tsc --noEmit`）
 - [ ] **版本号**: `package.json` 中版本号已更新
 - [ ] **更新日志**: `CHANGELOG.md` 已更新新版本内容
 - [ ] **README**: 功能描述和版本信息已更新
@@ -25,10 +25,10 @@ rm -rf out/
 rm -rf *.vsix
 
 # 安装依赖（确保最新）
-npm ci
+pnpm install
 
 # 运行预发布脚本（编译 TypeScript）
-npm run vscode:prepublish
+pnpm vscode:prepublish
 
 # 验证构建产物
 ls out/  # 应包含 extension.js 等文件
@@ -37,7 +37,7 @@ ls out/  # 应包含 extension.js 等文件
 ### 1.3 打包扩展
 ```bash
 # 打包成 VSIX 文件
-npm run package
+pnpm package
 # 等价于: vsce package
 
 # 验证打包结果
@@ -74,7 +74,7 @@ vsce ls-publishers
 ### 2.2 发布到 Marketplace
 ```bash
 # 方式1: 直接发布（推荐）
-npm run publish
+pnpm publish
 # 等价于: vsce publish
 
 # 方式2: 发布指定版本
@@ -99,23 +99,24 @@ vsce publish --pre-release
 - **PATCH**: 向后兼容的问题修复（如 0.2.5 → 0.2.6）
 
 ### 3.2 版本号更新流程
+
 ```bash
 # 更新到下一个补丁版本
-npm version patch  # 0.2.5 → 0.2.6
+pnpm version patch  # 0.2.5 → 0.2.6
 
 # 更新到下一个次要版本
-npm version minor  # 0.2.5 → 0.3.0
+pnpm version minor  # 0.2.5 → 0.3.0
 
 # 更新到下一个主要版本
-npm version major  # 0.2.5 → 1.0.0
+pnpm version major  # 0.2.5 → 1.0.0
 
 # 手动指定版本
-npm version 0.2.6
+pnpm version 0.2.6
 ```
 
 ### 3.3 Git 标签管理
 ```bash
-# npm version 会自动创建 Git 标签
+# pnpm version 会自动创建 Git 标签
 git tag  # 查看所有标签
 
 # 推送标签到远程仓库
@@ -131,11 +132,11 @@ git push origin --delete v0.2.5
 ## 4. 发布检查清单
 
 ### 4.1 发布前检查
-- [ ] **代码测试**: `npm run test` 通过
-- [ ] **代码质量**: `npm run lint` 无错误
+- [ ] **代码测试**: `pnpm test` 通过
+- [ ] **代码质量**: `pnpm lint` 无错误
 - [ ] **版本更新**: `package.json` 版本号已递增
 - [ ] **变更记录**: `CHANGELOG.md` 新版本内容已添加
-- [ ] **构建成功**: `npm run vscode:prepublish` 无错误
+- [ ] **构建成功**: `pnpm vscode:prepublish` 无错误
 - [ ] **打包成功**: `vsce package` 生成 .vsix 文件
 - [ ] **本地验证**: 手动安装 .vsix 文件测试功能
 
@@ -182,22 +183,22 @@ jobs:
       - name: Install dependencies
         run: |
           cd code
-          npm ci
+          pnpm install
           
       - name: Run tests
         run: |
           cd code
-          npm run test:unit
+          pnpm test:unit
           
       - name: Build extension
         run: |
           cd code
-          npm run vscode:prepublish
+          pnpm vscode:prepublish
           
       - name: Publish to Marketplace
         run: |
           cd code
-          npx vsce publish -p ${{ secrets.VSCE_TOKEN }}
+          pnpm vsce publish -p ${{ secrets.VSCE_TOKEN }}
 ```
 
 ### 6.2 环境变量配置

@@ -9,7 +9,7 @@
 ### 1.1 运行环境
 - **操作系统**: Windows 10+, macOS 10.14+, Linux (Ubuntu 18.04+)
 - **Node.js**: 18.x 或更高版本 (推荐 18.19.0+)
-- **npm**: 8.x 或更高版本
+- **pnpm**: 8.x 或更高版本
 - **VSCode**: 1.75.0 或更高版本
 
 ### 1.2 Go 环境（开发调试需要）
@@ -27,13 +27,13 @@ nvm use 18.19.0
 
 # 验证安装
 node --version  # 应显示 v18.19.0+
-npm --version   # 应显示 8.x+
+pnpm --version  # 应显示 8.x+
 ```
 
 ### 2.2 安装 VSCode Extension 开发工具
 ```bash
 # 安装 vsce（VSCode Extension Manager）
-npm install -g @vscode/vsce
+pnpm add -g @vscode/vsce
 
 # 验证安装
 vsce --version
@@ -46,10 +46,10 @@ git clone https://github.com/BaiLuoYan/go-deps-explorer.git
 cd go-deps-explorer/code
 
 # 安装依赖
-npm install
+pnpm install
 
 # 验证依赖安装
-npm list --depth=0
+pnpm list --depth=0
 ```
 
 ## 3. 开发工具配置
@@ -85,10 +85,10 @@ npm list --depth=0
 ### 4.1 编译项目
 ```bash
 # 开发模式编译（监听文件变化）
-npm run watch
+pnpm watch
 
 # 或者单次编译
-npm run compile
+pnpm compile
 ```
 
 ### 4.2 运行调试
@@ -100,10 +100,10 @@ npm run compile
 ### 4.3 运行测试
 ```bash
 # 运行单元测试
-npm run test:unit
+pnpm test:unit
 
 # 运行集成测试（需要 VSCode 环境）
-npm run test
+pnpm test
 ```
 
 ## 5. 代码质量检查
@@ -111,31 +111,29 @@ npm run test
 ### 5.1 ESLint 检查
 ```bash
 # 运行 lint 检查
-npm run lint
+pnpm lint
 
 # 自动修复可修复的问题
-npm run lint -- --fix
+pnpm lint -- --fix
 ```
 
 ### 5.2 类型检查
 ```bash
 # TypeScript 类型检查
-npx tsc --noEmit
+pnpm tsc --noEmit
 ```
 
 ## 6. 常见问题
 
 ### 6.1 Node.js 版本不兼容
-**问题**: `npm install` 失败，提示 Node.js 版本过低
+**问题**: `pnpm install` 失败，提示 Node.js 版本过低
 **解决**: 升级 Node.js 到 18.x 或更高版本
 
 ### 6.2 vsce 命令不存在
 **问题**: `vsce: command not found`
 **解决**: 
 ```bash
-npm install -g @vscode/vsce
-# 或者使用 npx
-npx @vscode/vsce --version
+pnpm add -g @vscode/vsce
 ```
 
 ### 6.3 Go 环境问题
@@ -148,7 +146,7 @@ npx @vscode/vsce --version
 ### 6.4 VSCode 调试模式无响应
 **问题**: 按 F5 后新窗口无法加载扩展
 **解决**:
-1. 确认项目已编译：`npm run compile`
+1. 确认已使用 `pnpm compile` 编译项目
 2. 检查 `.vscode/launch.json` 配置
 3. 重启 VSCode 后重试
 
@@ -157,8 +155,8 @@ npx @vscode/vsce --version
 ### 7.1 推荐的开发流程
 1. **修改代码** → 代码自动编译（watch 模式）
 2. **F5 调试** → 在新窗口验证功能
-3. **运行测试** → 确保回归测试通过
-4. **Lint 检查** → 确保代码规范
+3. **运行测试** → `pnpm test:unit`
+4. **Lint 检查** → `pnpm lint`
 5. **提交代码** → Git commit
 
 ### 7.2 调试技巧
