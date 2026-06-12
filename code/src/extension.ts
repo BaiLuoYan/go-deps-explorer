@@ -77,24 +77,7 @@ function findGoProjects(): { root: string; name: string }[] {
   if (!folders) { return projects; }
 
   for (const folder of folders) {
-    const goModPath = path.join(folder.uri.fsPath, 'go.mod');
-    if (fs.existsSync(goModPath)) {
-      projects.push({ root: folder.uri.fsPath, name: folder.name });
-    }
-    // Also check immediate subdirectories for mono-repo setups
-    try {
-      const entries = fs.readdirSync(folder.uri.fsPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith('.')) {
-          const subGoMod = path.join(folder.uri.fsPath, entry.name, 'go.mod');
-          if (fs.existsSync(subGoMod)) {
-            projects.push({ root: path.join(folder.uri.fsPath, entry.name), name: `${folder.name}/${entry.name}` });
-          }
-        }
-      }
-    } catch {
-      // ignore read errors
-    }
+    scanForGoProjects(folder.uri.fsPath, folder.uri.fsPath, folder.name, projects, 0);
   }
 
   // Deduplicate by root path, preserving order
@@ -104,4 +87,36 @@ function findGoProjects(): { root: string; name: string }[] {
     seen.add(p.root);
     return true;
   });
+}
+
+function scanForGoProjects(
+  dir: string,
+  workspaceRoot: string,
+  workspaceName: string,
+  results: { root: string; name: string }[],
+  depth: number,
+  maxDepth = 4,
+): void {
+  if (depth > maxDepth) { return; }
+
+  const goModPath = path.join(dir, 'go.mod');
+  if (fs.existsSync(goModPath)) {
+    const relative = path.relative(workspaceRoot, dir);
+    const name = relative ? `${workspaceName}/${relative}` : workspaceName;
+    results.push({ root: dir, name });
+    // Don't descend into a Go module — nested modules are unusual and expensive
+    return;
+  }
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'vendor' || entry.name === 'node_modules') {
+        continue;
+      }
+      scanForGoProjects(path.join(dir, entry.name), workspaceRoot, workspaceName, results, depth + 1, maxDepth);
+    }
+  } catch {
+    // ignore read errors
+  }
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.7] - 2026-06-12
+
+### Fixed
+- **Deep nested Go projects**: `findGoProjects` now recursively scans up to 4 directory levels deep (previously only 1 level), so projects like `A/a/a1/go.mod` are correctly discovered and rendered in the dependency tree
+- When jumping to dependency source from a deeply nested project, the tree now correctly reveals that project's dependency rather than a sibling project's
+
 ## [0.2.6] - 2026-06-12
 
 ### Fixed
