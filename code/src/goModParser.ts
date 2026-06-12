@@ -9,6 +9,23 @@ import { parseJsonStream, isStandardLibraryPackage, parseGoModText } from './pur
 
 const outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
 
+interface GoModule {
+  Path: string;
+  Version?: string;
+  Main?: boolean;
+  Indirect?: boolean;
+  Dir?: string;
+  GoVersion?: string;
+  Replace?: { Path: string; Version?: string; Dir?: string };
+}
+
+interface GoPackage {
+  Imports?: string[];
+  TestImports?: string[];
+  XTestImports?: string[];
+  Deps?: string[];
+}
+
 export class GoModParser {
   constructor(private config: ConfigManager) {}
 
@@ -30,7 +47,7 @@ export class GoModParser {
         try {
           const modules = parseJsonStream(stdout);
           const deps: DependencyInfo[] = [];
-          for (const mod of modules) {
+          for (const mod of modules as GoModule[]) {
             if (mod.Main) { continue; }
             const dep: DependencyInfo = {
               path: mod.Path,
@@ -92,7 +109,7 @@ export class GoModParser {
   }
 
   async parseStdlibDeps(projectRoot: string): Promise<DependencyInfo[]> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
       // First get GOROOT
       exec('go env GOROOT', { cwd: projectRoot }, (error, goroot, _stderr) => {
         if (error) {
@@ -114,9 +131,9 @@ export class GoModParser {
           try {
             const packages = parseJsonStream(stdout);
             const stdlibImports = new Set<string>();
-            
+
             // Extract all imports from all packages (including test imports and transitive deps)
-            for (const pkg of packages) {
+            for (const pkg of packages as GoPackage[]) {
               const allImports = [
                 ...(pkg.Imports || []),
                 ...(pkg.TestImports || []),

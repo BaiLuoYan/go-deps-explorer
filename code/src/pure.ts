@@ -2,8 +2,8 @@ import * as path from 'path';
 import { DependencyInfo } from './models';
 
 /** Parse a stream of JSON objects (go list output) */
-export function parseJsonStream(text: string): any[] {
-  const results: any[] = [];
+export function parseJsonStream(text: string): unknown[] {
+  const results: unknown[] = [];
   let depth = 0;
   let start = -1;
   for (let i = 0; i < text.length; i++) {

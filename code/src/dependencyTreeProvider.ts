@@ -297,7 +297,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
       // preferred 没命中缓存时，直接走 candidates 构建，不 fallback 到其他项目的缓存
     } else {
       // 没有 preferred 时，遍历查找任意项目的缓存
-      for (const [id, node] of this.nodeMap) {
+      for (const [, node] of this.nodeMap) {
         if (node instanceof FileNode && node.fsPath === filePath) {
           const depNode = this.findParentDep(node);
           return { depNode, fileNode: node };
@@ -344,10 +344,10 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
   }
 
   private findParentDep(node: TreeNode): DependencyNode | undefined {
-    let current: any = node;
+    let current: TreeNode | undefined = node;
     while (current) {
       if (current instanceof DependencyNode) { return current; }
-      current = current.parent;
+      current = 'parent' in current ? (current as { parent: TreeNode }).parent : undefined;
     }
     return undefined;
   }
@@ -479,14 +479,14 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     const dep = node.dep;
     const lines = [
       `**${dep.path}**`,
-      ``,
+      '',
       `Version: \`${dep.version}\`  `,
       `Type: ${dep.indirect ? 'Indirect' : 'Direct'}  `,
       `Path: \`${node.sourcePath}\`  `,
     ];
     if (dep.replace) {
-      lines.push(``);
-      lines.push(`**Replace:**  `);
+      lines.push('');
+      lines.push('**Replace:**  ');
       lines.push(`→ ${dep.replace.path}${dep.replace.version ? '@' + dep.replace.version : ''}  `);
       if (dep.replace.dir) { lines.push(`Path: \`${dep.replace.dir}\`  `); }
     }
@@ -495,7 +495,7 @@ export class DependencyTreeProvider implements vscode.TreeDataProvider<TreeNode>
     }
     // URL guess
     if (dep.path.startsWith('github.com/') || dep.path.startsWith('gitlab.com/')) {
-      lines.push(``);
+      lines.push('');
       lines.push(`🔗 [https://${dep.path}](https://${dep.path})`);
     }
     const md = new vscode.MarkdownString(lines.join('\n'));

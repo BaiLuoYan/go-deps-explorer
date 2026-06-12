@@ -2,36 +2,42 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { DependencyTreeProvider } from './dependencyTreeProvider';
-import { TreeNode, FileNode } from './models';
+import { TreeNode, DependencyInfo } from './models';
 import { getGopath } from './utils';
-import { extractModuleFromPath } from './pure';
 
 export class EditorTracker {
   private disposables: vscode.Disposable[] = [];
   private outputChannel: vscode.OutputChannel;
   private lastProjectRoot: string | undefined;
   private gorootSrc: string | undefined;
-  private pendingReveal = false;
 
   constructor(
     private treeView: vscode.TreeView<TreeNode>,
     private treeProvider: DependencyTreeProvider,
   ) {
     this.outputChannel = vscode.window.createOutputChannel('Go Deps Explorer');
-    
+
     // Listen for editor changes
-    this.disposables.push(vscode.window.onDidChangeActiveTextEditor(editor => {
-      if (editor) { this.onEditorChanged(editor); }
-    }));
+    this.disposables.push(
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (editor) {
+          this.onEditorChanged(editor);
+        }
+      }),
+    );
 
     // Listen for tree view visibility changes
-    this.disposables.push(treeView.onDidChangeVisibility(e => {
-      if (e.visible) {
-        this.outputChannel.appendLine('Tree view became visible, checking current editor');
-        const editor = vscode.window.activeTextEditor;
-        if (editor) { this.onEditorChanged(editor); }
-      }
-    }));
+    this.disposables.push(
+      treeView.onDidChangeVisibility((e) => {
+        if (e.visible) {
+          this.outputChannel.appendLine('Tree view became visible, checking current editor');
+          const editor = vscode.window.activeTextEditor;
+          if (editor) {
+            this.onEditorChanged(editor);
+          }
+        }
+      }),
+    );
 
     // Cache GOROOT on init
     this.initGoroot();
@@ -61,7 +67,10 @@ export class EditorTracker {
           const candidates = ['/usr/local/go/src', '/usr/lib/go/src'];
           const fs = require('fs');
           for (const p of candidates) {
-            if (fs.existsSync(p)) { this.gorootSrc = p; break; }
+            if (fs.existsSync(p)) {
+              this.gorootSrc = p;
+              break;
+            }
           }
         }
         if (this.gorootSrc) {
@@ -74,7 +83,7 @@ export class EditorTracker {
   private async onEditorChanged(editor: vscode.TextEditor): Promise<void> {
     const filePath = editor.document.uri.fsPath;
     this.outputChannel.appendLine(`Editor changed: ${filePath}`);
-    
+
     // Track the last known project root from non-dependency files
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
     if (workspaceFolder) {
@@ -82,9 +91,9 @@ export class EditorTracker {
       this.outputChannel.appendLine(`Updated lastProjectRoot: ${this.lastProjectRoot}`);
     }
 
-    if (!this.isDependencyFile(filePath)) { 
+    if (!this.isDependencyFile(filePath)) {
       this.outputChannel.appendLine('Not a dependency file, skipping');
-      return; 
+      return;
     }
 
     // Mark dependency files as read-only (covers Cmd+Click jumps via gopls)
@@ -97,7 +106,7 @@ export class EditorTracker {
     this.outputChannel.appendLine(`Using project root: ${this.lastProjectRoot || 'none'}`);
 
     let result = this.treeProvider.findNodeForFile(filePath, this.lastProjectRoot);
-    
+
     // If not found and file is under GOROOT/src, dynamically add the stdlib package
     if (!result?.depNode && this.gorootSrc && filePath.startsWith(this.gorootSrc + path.sep)) {
       const relativePath = path.relative(this.gorootSrc, filePath);
@@ -110,7 +119,12 @@ export class EditorTracker {
       }
       if (pkgPath) {
         const pkgDir = path.join(this.gorootSrc, pkgPath);
-        const dep: any = { path: pkgPath, version: 'stdlib', indirect: false, dir: pkgDir };
+        const dep: DependencyInfo = {
+          path: pkgPath,
+          version: 'stdlib',
+          indirect: false,
+          dir: pkgDir,
+        };
         // Add to all projects (or preferred project)
         const targetRoot = this.lastProjectRoot || Array.from(this.treeProvider['projects'].keys())[0];
         if (targetRoot) {
@@ -121,17 +135,14 @@ export class EditorTracker {
         }
       }
     }
-    
-    if (!result?.depNode) { 
+
+    if (!result?.depNode) {
       this.outputChannel.appendLine('No dependency node found for file');
-      return; 
+      return;
     }
 
     // In lazy mode, ensure this dep is added to the revealed set
-    this.treeProvider.revealDep(
-      result.depNode.parent.projectRoot,
-      result.depNode.dep,
-    );
+    this.treeProvider.revealDep(result.depNode.parent.projectRoot, result.depNode.dep);
 
     this.outputChannel.appendLine(`Found dependency node: ${result.depNode.label}`);
 
@@ -168,14 +179,18 @@ export class EditorTracker {
     const gopath = getGopath();
     const modCachePath = path.join(gopath, 'pkg', 'mod');
 
-    if (filePath.startsWith(modCachePath)) { return true; }
+    if (filePath.startsWith(modCachePath)) {
+      return true;
+    }
 
     // Check vendor directories
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders) {
       for (const folder of workspaceFolders) {
         const vendorDir = path.join(folder.uri.fsPath, 'vendor');
-        if (filePath.startsWith(vendorDir)) { return true; }
+        if (filePath.startsWith(vendorDir)) {
+          return true;
+        }
       }
     }
 
@@ -188,7 +203,7 @@ export class EditorTracker {
   }
 
   dispose(): void {
-    this.disposables.forEach(d => d.dispose());
+    this.disposables.forEach((d) => d.dispose());
     this.outputChannel.dispose();
   }
 }

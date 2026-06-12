@@ -83,10 +83,11 @@ export class DirectoryNode {
   }
 
   private resolveProjectRoot(): string {
-    let node: any = this.parent;
+    let node: TreeNode = this.parent;
     while (node) {
-      if (node.projectRoot) { return node.projectRoot; }
-      node = node.parent;
+      if ('projectRoot' in node) { return node.projectRoot; }
+      if (!('parent' in node)) { break; }
+      node = (node as DependencyNode | DirectoryNode | FileNode).parent;
     }
     return '';
   }
@@ -107,10 +108,11 @@ export class FileNode {
   }
 
   private resolveProjectRoot(): string {
-    let node: any = this.parent;
+    let node: TreeNode = this.parent;
     while (node) {
-      if (node.projectRoot) { return node.projectRoot; }
-      node = node.parent;
+      if ('projectRoot' in node) { return node.projectRoot; }
+      if (!('parent' in node)) { break; }
+      node = (node as DependencyNode | DirectoryNode | FileNode).parent;
     }
     return '';
   }
